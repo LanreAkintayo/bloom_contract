@@ -208,10 +208,11 @@ contract BloomEscrow is ReentrancyGuard {
 
         // Update the deal status to disputed
         deal.status = Status.Disputed;
-
-
-
     }
+
+    function getDeal(uint256 id) external view returns (Deal memory){
+        return deals[id];
+    }   
 
 
 }
