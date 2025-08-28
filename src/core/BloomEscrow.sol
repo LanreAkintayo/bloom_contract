@@ -1,34 +1,36 @@
 // SPDX-License-Identifier: UNLICENSED
-
 pragma solidity 0.8.20;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-
-error BloomEscrow__InvalidParameters();
-error BloomEscrow__TransferFailed();
-error BloomEscrow__NotSender();
-error BloomEscrow__NotPending();
-error BloomEscrow__NotReceiver();
-error BloomEscrow__NotAcknowledged();
-error BloomEscrow__AlreadyAcknowledged();
-error BloomEscrow__Restricted();
-error BloomEscrow__CannotDispute();
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {TypesLib} from "../library/TypesLib.sol";
 
 
-contract BloomEscrow is ReentrancyGuard {
+
+
+contract BloomEscrow is ReentrancyGuard, Ownable(msg.sender) {
     using SafeERC20 for IERC20;
 
-    enum Status {
-        Pending,    // Newly created, waiting
-        Acknowledged, // Receiver has acknowledged the deal
-        Completed,  // Delivered and claimed successfully
-        Disputed,   // Dispute has been raised
-        Resolved,   // Dispute settled (either party can get funds)
-        Reversed ,   // Funds returned to sender (timeout, cancel)
-        Canceled    // Deal canceled by sender before acknowledgment
-    }   
+    //////////////////////////
+    // ERRORS
+    //////////////////////////
+
+    error BloomEscrow__InvalidParameters();
+    error BloomEscrow__TransferFailed();
+    error BloomEscrow__NotSender();
+    error BloomEscrow__NotPending();
+    error BloomEscrow__NotReceiver();
+    error BloomEscrow__NotAcknowledged();
+    error BloomEscrow__AlreadyAcknowledged();
+    error BloomEscrow__Restricted();
+    error BloomEscrow__CannotDispute();
+    error BloomEscrow__ZeroAddress();
+
+    //////////////////////////
+    // EVENTS
+    //////////////////////////
 
     event DealCreated(
         uint256 indexed dealId,
@@ -38,17 +40,19 @@ contract BloomEscrow is ReentrancyGuard {
         address tokenAddress
     );
 
-    struct Deal {   
-        address sender;
-        address receiver;
-        uint256 amount;
-        address tokenAddress; // Address(0) for native currency
-        Status status;
-        uint256 id;
-    }
+    
 
-    mapping(uint256 => Deal) public deals;
+    //////////////////////////
+    // STATE VARIABLES
+    //////////////////////////
+
+    mapping(uint256 => TypesLib.Deal) public deals;
     uint256 public dealCount;
+    address public disputeManagerAddress;
+
+    //////////////////////////
+    // MODIFIERS
+    //////////////////////////
 
     modifier onlySender(uint256 id) {
         if (msg.sender != deals[id].sender) {
@@ -56,6 +60,7 @@ contract BloomEscrow is ReentrancyGuard {
         }
         _;
     }
+
     modifier onlyReceiver(uint256 id) {
         if (msg.sender != deals[id].receiver) {
             revert BloomEscrow__NotReceiver();
@@ -63,19 +68,36 @@ contract BloomEscrow is ReentrancyGuard {
         _;
     }
 
-    function createDeal(address sender, address receiver, address tokenAddress, uint256 amount) external payable nonReentrant{
-        // Validate all parameters;
+    //////////////////////////
+    // EXTERNAL FUNCTIONS
+    //////////////////////////
+
+    function addDisputeManager(address _disputeManagerAddress) external onlyOwner{
+        if (disputeManagerAddress != address(0)) {
+            revert BloomEscrow__ZeroAddress();
+        }
+        // Only the contract deployer can set the dispute manager address
+        disputeManagerAddress = _disputeManagerAddress;
+    }
+
+    function createDeal(
+        address sender,
+        address receiver,
+        address tokenAddress,
+        uint256 amount
+    ) external payable nonReentrant {
+        // Validate parameters
         if (sender == address(0) || receiver == address(0) || amount == 0) {
             revert BloomEscrow__InvalidParameters();
         }
 
         // Initialize a new deal
-        Deal memory newDeal = Deal({
+        TypesLib.Deal memory newDeal = TypesLib.Deal({
             sender: sender,
             receiver: receiver,
             amount: amount,
             tokenAddress: tokenAddress,
-            status: Status.Pending,
+            status: TypesLib.Status.Pending,
             id: dealCount
         });
 
@@ -83,111 +105,85 @@ contract BloomEscrow is ReentrancyGuard {
         deals[dealCount] = newDeal;
         dealCount++;
 
-        
-        // Transfer the funds from the sender to the escow;
-        if (tokenAddress != address(0)){
-             // Transfer for ERC20;
+        // Transfer the funds to escrow
+        if (tokenAddress != address(0)) {
             IERC20 token = IERC20(tokenAddress);
             token.safeTransferFrom(sender, address(this), amount);
-        } else{
-            // Transfer for native;
+        } else {
             (bool native_success, ) = msg.sender.call{value: amount}("");
             if (!native_success) {
                 revert BloomEscrow__TransferFailed();
             }
         }
-       
-        
-        emit DealCreated(dealCount, sender, receiver, amount, tokenAddress);
 
+        emit DealCreated(dealCount, sender, receiver, amount, tokenAddress);
     }
 
-   
+    function acknowledgeDeal(uint256 id) external onlyReceiver(id) {
+        TypesLib.Deal storage deal = deals[id];
 
-    // The purpose is just to prevent the sender from withdrawing the funds after the receiver has delivered the service
-    function acknowledgeDeal(uint256 id) external onlyReceiver(id){
-        Deal storage deal = deals[id];
-
-        // Can only acknowledge deal when pending
-        if (deal.status != Status. Pending){
+        if (deal.status != TypesLib.Status.Pending) {
             revert BloomEscrow__NotPending();
         }
 
-        // Update the deal status to acknowledged
-        deal.status = Status.Acknowledged;     
+        deal.status = TypesLib.Status.Acknowledged;
     }
 
-    function unacknowledgeDeal(uint256 id) external onlyReceiver(id){
-        Deal storage deal = deals[id];
+    function unacknowledgeDeal(uint256 id) external onlyReceiver(id) {
+        TypesLib.Deal storage deal = deals[id];
 
-        // Can only unacknowledge deal when acknowledged
-        if (deal.status != Status.Acknowledged){
+        if (deal.status != TypesLib.Status.Acknowledged) {
             revert BloomEscrow__NotAcknowledged();
         }
 
-        // Update the deal status to pending
-        deal.status = Status.Pending;     
+        deal.status = TypesLib.Status.Pending;
     }
 
     function cancelDeal(uint256 id) external onlySender(id) {
-        Deal storage deal = deals[id];
-        Status status = deal.status;
-        
-        // You can only cancel deal if it is pending and it has not been acknowledged by the receiver
-        if (status != Status.Pending){
+        TypesLib.Deal storage deal = deals[id];
+        TypesLib.Status status = deal.status;
+
+        if (status != TypesLib.Status.Pending) {
             revert BloomEscrow__NotPending();
         }
-        if (status == Status.Acknowledged){
+        if (status == TypesLib.Status.Acknowledged) {
             revert BloomEscrow__AlreadyAcknowledged();
         }
-        // Update the deal status to canceled
-        deal.status = Status.Canceled;
 
-        // Transfer the funds back to the sender
+        deal.status = TypesLib.Status.Canceled;
+
         address tokenAddress = deal.tokenAddress;
         uint256 amount = deal.amount;
-        address sender = deal.sender;   
-        if (tokenAddress != address(0)){
-             // Transfer for ERC20;
+        address sender = deal.sender;
+
+        if (tokenAddress != address(0)) {
             IERC20 token = IERC20(tokenAddress);
             token.safeTransfer(sender, amount);
-        } else{
-            // Transfer for native;
+        } else {
             (bool native_success, ) = sender.call{value: amount}("");
             if (!native_success) {
                 revert BloomEscrow__TransferFailed();
             }
         }
-
     }
 
+    function finalizeDeal(uint256 id) external onlySender(id) {
+        TypesLib.Deal storage deal = deals[id];
 
-     function finalizeDeal(uint256 id) external onlySender(id) {
-        Deal storage deal = deals[id];
-
-        if (msg.sender != deal.sender){
-            revert BloomEscrow__NotSender();
-        }
-
-        // Can only accept deal when pending
-        if (deal.status != Status. Pending){
+        if (deal.status != TypesLib.Status.Pending) {
             revert BloomEscrow__NotPending();
         }
 
-        // Update the deal status to completed
-        deal.status = Status.Completed;
+        deal.status = TypesLib.Status.Completed;
 
         address tokenAddress = deal.tokenAddress;
         uint256 amount = deal.amount;
-        address receiver = deal.receiver;   
+        address receiver = deal.receiver;
 
-         // Transfer the funds to the receiver
-        if (tokenAddress != address(0)){
-             // Transfer for ERC20;
+        if (tokenAddress != address(0)) {
             IERC20 token = IERC20(tokenAddress);
             token.safeTransfer(receiver, amount);
-        } else{
-            // Transfer for native;
+        } else {
             (bool native_success, ) = receiver.call{value: amount}("");
             if (!native_success) {
                 revert BloomEscrow__TransferFailed();
@@ -195,24 +191,20 @@ contract BloomEscrow is ReentrancyGuard {
         }
     }
 
-    function dispute(uint256 id) external {
-        Deal storage deal = deals[id];
-
-        if (msg.sender != deal.sender && msg.sender != deal.receiver){
+    function updateStatus(
+        uint256 id,
+        TypesLib.Status newStatus
+    ) external {
+        if (msg.sender != disputeManagerAddress) {
             revert BloomEscrow__Restricted();
         }
-        // Can only dispute deal when pending or acknowledged
-        if (deal.status != Status. Pending && deal.status != Status.Acknowledged){
-            revert BloomEscrow__CannotDispute();
-        }
 
-        // Update the deal status to disputed
-        deal.status = Status.Disputed;
+        TypesLib.Deal storage deal = deals[id];
+        deal.status = newStatus;
     }
 
-    function getDeal(uint256 id) external view returns (Deal memory){
+
+    function getDeal(uint256 id) external view returns (TypesLib.Deal memory) {
         return deals[id];
-    }   
-
-
+    }
 }
