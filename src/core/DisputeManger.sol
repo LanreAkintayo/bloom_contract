@@ -39,9 +39,10 @@ contract DisputeManager {
         uint256 indexed dealId,
         address indexed uploader,
         string uri,
-        uint256 timestamp,
+        uint128 timestamp,
         EvidenceType evidenceType,
         string description
+        
     );
 
     //////////////////////////
@@ -55,6 +56,7 @@ contract DisputeManager {
         uint256 timestamp;
         EvidenceType evidenceType;
         string description;
+        bool removed;
     }
 
     struct Dispute {
@@ -118,16 +120,12 @@ contract DisputeManager {
 
     /// @notice Adds evidence to a dispute
     /// @param dealId The ID of the deal
-    /// @param uploader The participant adding the evidence
     /// @param uri The URI of the evidence (IPFS or similar)
-    /// @param timestamp The timestamp of the evidence
     /// @param evidenceType The type of evidence
     /// @param description Additional description of the evidence
     function addEvidence(
         uint256 dealId,
-        address uploader,
         string calldata uri,
-        uint128 timestamp,
         EvidenceType evidenceType,
         string calldata description
     ) external {
@@ -139,21 +137,47 @@ contract DisputeManager {
         }
 
         // Ensure uploader is sender or receiver
-        if (uploader != deal.sender && uploader != deal.receiver) {
+        if (msg.sender != deal.sender && msg.sender != deal.receiver) {
             revert DisputeManager__NotParticipant();
         }
-
+        uint128 timestamp = uint128(block.timestamp);
         Evidence memory evidence = Evidence({
             dealId: dealId,
-            uploader: uploader,
+            uploader: msg.sender,
             uri: uri,
             timestamp: timestamp,
             evidenceType: evidenceType,
-            description: description
+            description: description,
+            removed: false
         });
 
-        dealEvidences[dealId][uploader].push(evidence);
+        dealEvidences[dealId][msg.sender].push(evidence);
 
-        emit EvidenceAdded(dealId, uploader, uri, timestamp, evidenceType, description);
+        emit EvidenceAdded(dealId, msg.sender, uri, timestamp, evidenceType, description);
     }
+
+    function removeEvidence(uint256 dealId, uint256 evidenceIndex) external {
+        TypesLib.Deal memory deal = bloomEscrow.getDeal(dealId);
+
+        // Ensure deal is currently disputed
+        if (deal.status != TypesLib.Status.Disputed) {
+            revert DisputeManager__NotDisputed();
+        }
+
+        // Ensure uploader is sender or receiver
+        if (msg.sender != deal.sender && msg.sender != deal.receiver) {
+            revert DisputeManager__NotParticipant();
+        }
+
+        Evidence[] storage evidences = dealEvidences[dealId][msg.sender];
+
+        if (evidenceIndex >= evidences.length) {
+            revert DisputeManager__CannotAddEvidence();
+        }
+
+        evidences[evidenceIndex].removed = true;
+
+        // Note: No event emitted for evidence removal to maintain evidence integrity
+    }
+
 }
