@@ -64,3 +64,22 @@ $ forge --help
 $ anvil --help
 $ cast --help
 ```
+
+
+State variables
+
+Constants / immutables
+
+Errors
+
+Events
+
+Modifiers
+
+Constructor
+
+External/public functions
+
+Internal/private functions
+
+Fallback/receive functions

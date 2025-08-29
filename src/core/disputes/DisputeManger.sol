@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.20;
 
-import {IBloomEscrow} from "../interfaces/IBloomEscrow.sol";
-import {TypesLib} from "../library/TypesLib.sol";
+import {IBloomEscrow} from "../../interfaces/IBloomEscrow.sol";
+import {TypesLib} from "../../library/TypesLib.sol";
 
 /// @title Dispute Manager for Bloom Escrow
 /// @notice Handles disputes and evidence for deals in BloomEscrow
