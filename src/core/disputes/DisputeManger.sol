@@ -2,6 +2,7 @@
 pragma solidity 0.8.20;
 
 import {IBloomEscrow} from "../../interfaces/IBloomEscrow.sol";
+import {IFeeController} from "../../interfaces/IFeeController.sol";
 import {TypesLib} from "../../library/TypesLib.sol";
 
 /// @title Dispute Manager for Bloom Escrow
@@ -70,6 +71,7 @@ contract DisputeManager {
     //////////////////////////
 
     IBloomEscrow public bloomEscrow;
+    IFeeController public feeController;
 
     uint256 public disputeId;
     mapping(uint256 => Dispute) public disputes;
@@ -79,8 +81,10 @@ contract DisputeManager {
     // CONSTRUCTOR
     //////////////////////////
 
-    constructor(address escrowAddress) {
+    constructor(address escrowAddress, address feeControllerAddress) {
         bloomEscrow = IBloomEscrow(escrowAddress);
+        feeController = IFeeController(feeControllerAddress);
+
     }
 
     //////////////////////////
@@ -110,6 +114,16 @@ contract DisputeManager {
 
         disputes[disputeId] = dispute;
         disputeId++;
+
+        // Charge dispute fee (if any) - omitted for simplicity
+        uint256 disputeFee = 0;
+
+        if (feeController.disputeFee() > 0) {
+            disputeFee = feeController.calculateDisputeFee(deal.amount);
+        }
+
+        // Transfer dipsute fee to the reserve wallet address
+        
 
         // update the deal status to Disputed
         bloomEscrow.updateStatus(dealId, TypesLib.Status.Disputed);

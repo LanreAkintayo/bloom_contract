@@ -43,7 +43,6 @@ contract BloomEscrow is ReentrancyGuard, EscrowTokens {
     uint256 public dealCount;
     address public disputeManagerAddress;
     address public feeControllerAddress;
-    
 
     //////////////////////////
     // MODIFIERS
@@ -102,7 +101,7 @@ contract BloomEscrow is ReentrancyGuard, EscrowTokens {
         TypesLib.Deal memory newDeal = TypesLib.Deal({
             sender: sender,
             receiver: receiver,
-            amount: amount,
+            amount: tokenAddress == address(0) ? msg.value : amount,
             tokenAddress: tokenAddress,
             status: TypesLib.Status.Pending,
             id: dealCount
@@ -112,11 +111,11 @@ contract BloomEscrow is ReentrancyGuard, EscrowTokens {
         deals[dealCount] = newDeal;
         dealCount++;
 
-        uint256 totalAmount = amount;
+        uint256 totalAmount = tokenAddress == address(0) ? msg.value : amount;
 
         // Charge escrow fee (if any) - omitted for simplicity
         IFeeController feeController = IFeeController(feeControllerAddress);
-        
+
         if (feeController.escrowFee() > 0) {
             uint256 escrowFee = feeController.calculateEscrowFee(amount);
             totalAmount += escrowFee;
