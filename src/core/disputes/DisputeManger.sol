@@ -4,10 +4,15 @@ pragma solidity 0.8.20;
 import {IBloomEscrow} from "../../interfaces/IBloomEscrow.sol";
 import {IFeeController} from "../../interfaces/IFeeController.sol";
 import {TypesLib} from "../../library/TypesLib.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /// @title Dispute Manager for Bloom Escrow
 /// @notice Handles disputes and evidence for deals in BloomEscrow
 contract DisputeManager {
+
+    using SafeERC20 for IERC20;
+
     //////////////////////////
     // ENUMS
     //////////////////////////
@@ -30,6 +35,7 @@ contract DisputeManager {
     error DisputeManager__DisputeAlreadyOpened();
     error DisputeManager__Restricted();
     error DisputeManager__NotDisputed();
+    error DisputeManager__TransferFailed();
 
     //////////////////////////
     // EVENTS
@@ -122,8 +128,16 @@ contract DisputeManager {
             disputeFee = feeController.calculateDisputeFee(deal.amount);
         }
 
-        // Transfer dipsute fee to the reserve wallet address
-        
+        // Transfer dispute fee to the contract;
+        if (deal.tokenAddress != address(0)) {
+            IERC20 token = IERC20(deal.tokenAddress);
+            token.safeTransferFrom(msg.sender, address(this), disputeFee);
+        } else {
+            (bool native_success,) = msg.sender.call{value: disputeFee}("");
+            if (!native_success) {
+                revert DisputeManager__TransferFailed();
+            }
+        }
 
         // update the deal status to Disputed
         bloomEscrow.updateStatus(dealId, TypesLib.Status.Disputed);
