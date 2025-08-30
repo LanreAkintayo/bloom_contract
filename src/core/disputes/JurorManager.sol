@@ -15,6 +15,16 @@ contract JurorManager is Ownable {
     struct Juror {
         address jurorAddress;
         uint256 stakeAmount;
+        uint256 reputation;
+    }
+
+    // To keep track of the stake amount and reputation as at when selected
+    struct Candidate {
+        uint256 disputeId;
+        address jurorAddress;
+        uint256 stakeAmount;
+        uint256 reputation;
+        uint256 score;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -24,8 +34,21 @@ contract JurorManager is Ownable {
     uint256 public maxStakeAmount = 1_000_000_000e18;
 
     mapping(address => Juror) public jurors;
+    mapping(uint256 => Candidate[]) public disputeJurors;
+    mapping(uint256 => mapping(address => uint256)) public disputeVotes;
+    mapping(address => bool) public isJurorActive;
+
+    Juror[] public allJurors;
 
     IERC20 public bloomToken;
+
+    // For randomness;
+    mapping(uint256 => Candidate) private experiencedPoolTemporary;
+    mapping(uint256 => Candidate) private newbiePoolTemporary;
+    mapping(uint256 => uint256) private experienceNeededByDispute;
+    mapping(uint256 => uint256) private newbieNeededByDispute;
+    mapping(uint256 => bytes32) private requestIdToDispute;
+
 
     /*//////////////////////////////////////////////////////////////
                                 ERRORS
@@ -34,6 +57,9 @@ contract JurorManager is Ownable {
     error JurorManager__ZeroAmount();
     error JurorManager__InvalidStakeAmount();
     error JurorManager__AlreadyRegistered();
+    error JurorManager__NotRegistered();
+    error JurorManager__AlreadyAssignedJurors();
+    error JurorManager__ThresholdMismatched();
 
     /*//////////////////////////////////////////////////////////////
                                 EVENTS
@@ -41,6 +67,8 @@ contract JurorManager is Ownable {
     event JurorRegistered(address indexed juror, uint256 stakeAmount);
     event MinStakeAmountUpdated(uint256 newMinStakeAmount);
     event MaxStakeAmountUpdated(uint256 newMaxStakeAmount);
+    event MoreStaked(address juror, uint256 additionalStaked);
+    event JurorsSelected(uint256 indexed disputeId, Candidate[] indexed selected);
 
     /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
@@ -68,10 +96,14 @@ contract JurorManager is Ownable {
         bloomToken.safeTransferFrom(msg.sender, address(this), stakeAmount);
 
         // // Register juror
-        jurors[msg.sender] = Juror({
-            jurorAddress: msg.sender,
-            stakeAmount: stakeAmount,
-        });
+        Juror memory juror;
+        juror.jurorAddress = msg.sender;
+        juror.stakeAmount = stakeAmount;
+        juror.reputation = 0;
+
+        jurors[msg.sender] = juror;
+
+        // @complete Add to the array of all jurors
 
         emit JurorRegistered(msg.sender, stakeAmount);
     }
@@ -102,11 +134,152 @@ contract JurorManager is Ownable {
         emit MoreStaked(msg.sender, additionalStake);
     }
 
+    function computeScore(
+        uint256 stakeAmount,
+        uint256 reputation,
+        uint256 maxStakeAmount,
+        uint256 maxReputation,
+        uint256 alphaFP,
+        uint256 betaFP
+    ) public view returns (uint256) {
+        uint256 score = (alphaFP * stakeAmount / maxStakeAmount) + (betaFP * (reputation + 1) / (maxReputation + 1));
+        return score;
+    }
+
+    function selectJurors(
+        uint256 disputeId,
+        uint256 thresholdFP,
+        uint256 alphaFP,
+        uint256 betaFP,
+        uint256 expNeeded,
+        uint256 newbieNeeded
+    ) external onlyOwner {
+        // Don't select juror for a dispute that already has a juror
+        if (disputeJurors[disputeId].length > 0) {
+            revert JurorManager__AlreadyAssignedJurors();
+        }
+
+        // To verify the experiencedPoolSize with the one computed off-chain
+        uint256 countAbove = 0;
+
+        Candidate[] memory experiencedPoolTemp = new Candidate[](allJurors.length);
+        Candidate[] memory newbiePoolTemp = new Candidate[](allJurors.length);
+        uint256 expIndex = 0;
+        uint256 newIndex = 0;
+
+        uint256 maxStake = 1;
+        uint256 maxReputation = 1;
+
+        //// find max stake & reputation
+        for (uint256 i = 0; i < allJurors.length; i++) {
+            Juror juror = allJurors[i];
+
+            // Make sure that we can only select a juror that is currently inactive and their stake amount is greater than the minimum stake amount
+            if (isjurorActive[juror.jurorAddress] && juror.stakeAmount >= minStakeAmount) {
+                if (juror.stakeAmount > maxStake) maxStake = juror.stakeAmount;
+                if (juror.reputation > maxReputation) maxReputation = juror.reputation;
+            }
+        }
+
+        // compute selection scores and assign to pools
+        for (uint256 i = 0; i < allJurors.length; i++) {
+            Juror juror = allJurors[i];
+
+            if (isjurorActive[juror.jurorAddress] && juror.stakeAmount >= minStakeAmount) {
+                uint256 score = _computeScore(juror.stakeAmount, juror.reputation, maxStake, maxReputation, alphaFP, betaFP);
+
+                if (score >= thresholdFP) {
+                    experiencedPoolTemp[expIndex++] = Candidate(juror.jurorAddress, juror.stakeAmount, juror.reputation, score);
+                    countAbove++;
+                } else {
+                    newbiePoolTemp[newIndex++] = Candidate(juror.jurorAddress, juror.stakeAmount, juror.reputation, score);
+                }
+            }
+        }
+
+        if (countAbove != experiencedPoolSize){
+            revert JurorManager__ThresholdMismatched();
+        }
+
+        // resize arrays
+        assembly {
+            mstore(experiencedPoolTemp, expIndex)
+        }
+        assembly {
+            mstore(newbiePoolTemp, newIndex)
+        }
+
+        // store temp pools for VRF callback
+        experiencedPoolTemporary[disputeId] = experiencedPoolTemp;
+        newbiePoolTemporary[disputeId] = newbiePoolTemp;
+        experienceNeededByDispute[disputeId] = expNeeded;
+        newbieNeededByDispute[disputeId] = newbieNeeded;
+
+        // request randomness from Chainlink VRF
+        bytes32 requestId = requestRandomness(keyHash, fee);
+        requestIdToDispute[requestId] = disputeId;
+
+    }
+
+     // ------------------- VRF CALLBACK -------------------
+    function fulfillRandomness(bytes32 requestId, uint256 randomness) internal override {
+        uint256 disputeId = requestIdToDeal[requestId];
+
+        Candidate[] memory experiencedPool = experiencedPoolTemporary[disputeId];
+        Candidate[] memory newbiePool = newbiePoolTemporary[disputeId];
+
+        uint256 expNeeded = experienceNeededByDispute[disputeId];
+        uint256 newbieNeeded = newbieNeededByDispute[disputeId];
+        uint256 total = expNeeded + newbieNeeded;
+
+        Candidate[] memory selected = new Candidate[](total);
+        uint256 idx = 0;
+        uint256 rand = randomness;
+
+        // pick experienced jurors
+        for (uint256 i = 0; i < expNeeded; i++) {
+            uint256 pickIdx = rand % experiencedPool.length;
+            selected[idx++] = experiencedPool[pickIdx]
+
+            // swap-remove
+            experiencedPool[pickIdx] = experiencedPool[experiencedPool.length - 1];
+            assembly { mstore(experiencedPool, sub(mload(experiencedPool), 1)) }
+
+            rand = uint256(keccak256(abi.encodePacked(rand, i)));
+        }
+
+        // pick newbie jurors
+        for (uint256 i = 0; i < newbieNeeded; i++) {
+            uint256 pickIdx = rand % newbiePool.length;
+            selected[idx++] = newbiePool[pickIdx];
+
+            // swap-remove
+            newbiePool[pickIdx] = newbiePool[newbiePool.length - 1];
+            assembly { mstore(newbiePool, sub(mload(newbiePool), 1)) }
+
+            rand = uint256(keccak256(abi.encodePacked(rand, i)));
+        }
+
+        // mark jurors active
+        for (uint256 i = 0; i < selected.length; i++) {
+            isJurorActive[selected[i].jurorAddress] = true;
+        }
+
+        disputeJurors[disputeId] = selected;
+       
+        emit JurorsSelected(disputeId, selected);
+    }
+
     function vote(uint256 dealId) external {
-        // Weighted voting will be employed here. It will be based on the stake and the reputation of the juror.
+        // Code for the selected jurors to vote
+    }
 
-         
+    function finishDispute(uint256 dealId) external onlyOwner {
+        // Code to finalize the dispute and distribute rewards/penalties
+    }
 
+    function _updateReputation(uint256 dealId, address juror, bool wonDispute) internal {
+        // Code to update juror reputation based on dispute outcome
     }
 
     function updateMinStakeAmount(uint256 _minStakeAmount) external onlyOwner {
