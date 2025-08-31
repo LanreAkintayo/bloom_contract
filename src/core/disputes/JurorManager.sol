@@ -49,7 +49,6 @@ contract JurorManager is Ownable {
     mapping(uint256 => uint256) private newbieNeededByDispute;
     mapping(uint256 => bytes32) private requestIdToDispute;
 
-
     /*//////////////////////////////////////////////////////////////
                                 ERRORS
     //////////////////////////////////////////////////////////////*/
@@ -137,12 +136,12 @@ contract JurorManager is Ownable {
     function computeScore(
         uint256 stakeAmount,
         uint256 reputation,
-        uint256 maxStakeAmount,
+        uint256 _maxStake,
         uint256 maxReputation,
         uint256 alphaFP,
         uint256 betaFP
     ) public view returns (uint256) {
-        uint256 score = (alphaFP * stakeAmount / maxStakeAmount) + (betaFP * (reputation + 1) / (maxReputation + 1));
+        uint256 score = (alphaFP * stakeAmount / _maxStake) + (betaFP * (reputation + 1) / (maxReputation + 1));
         return score;
     }
 
@@ -152,7 +151,8 @@ contract JurorManager is Ownable {
         uint256 alphaFP,
         uint256 betaFP,
         uint256 expNeeded,
-        uint256 newbieNeeded
+        uint256 newbieNeeded,
+        uint256 experiencedPoolSize
     ) external onlyOwner {
         // Don't select juror for a dispute that already has a juror
         if (disputeJurors[disputeId].length > 0) {
@@ -175,7 +175,7 @@ contract JurorManager is Ownable {
             Juror juror = allJurors[i];
 
             // Make sure that we can only select a juror that is currently inactive and their stake amount is greater than the minimum stake amount
-            if (isjurorActive[juror.jurorAddress] && juror.stakeAmount >= minStakeAmount) {
+            if (isJurorActive[juror.jurorAddress] && juror.stakeAmount >= minStakeAmount) {
                 if (juror.stakeAmount > maxStake) maxStake = juror.stakeAmount;
                 if (juror.reputation > maxReputation) maxReputation = juror.reputation;
             }
@@ -185,19 +185,22 @@ contract JurorManager is Ownable {
         for (uint256 i = 0; i < allJurors.length; i++) {
             Juror juror = allJurors[i];
 
-            if (isjurorActive[juror.jurorAddress] && juror.stakeAmount >= minStakeAmount) {
-                uint256 score = _computeScore(juror.stakeAmount, juror.reputation, maxStake, maxReputation, alphaFP, betaFP);
+            if (isJurorActive[juror.jurorAddress] && juror.stakeAmount >= minStakeAmount) {
+                uint256 score =
+                    computeScore(juror.stakeAmount, juror.reputation, maxStake, maxReputation, alphaFP, betaFP);
 
                 if (score >= thresholdFP) {
-                    experiencedPoolTemp[expIndex++] = Candidate(juror.jurorAddress, juror.stakeAmount, juror.reputation, score);
+                    experiencedPoolTemp[expIndex++] =
+                        Candidate(juror.jurorAddress, juror.stakeAmount, juror.reputation, score);
                     countAbove++;
                 } else {
-                    newbiePoolTemp[newIndex++] = Candidate(juror.jurorAddress, juror.stakeAmount, juror.reputation, score);
+                    newbiePoolTemp[newIndex++] =
+                        Candidate(juror.jurorAddress, juror.stakeAmount, juror.reputation, score);
                 }
             }
         }
 
-        if (countAbove != experiencedPoolSize){
+        if (countAbove != experiencedPoolSize) {
             revert JurorManager__ThresholdMismatched();
         }
 
@@ -218,12 +221,11 @@ contract JurorManager is Ownable {
         // request randomness from Chainlink VRF
         bytes32 requestId = requestRandomness(keyHash, fee);
         requestIdToDispute[requestId] = disputeId;
-
     }
 
-     // ------------------- VRF CALLBACK -------------------
+    // ------------------- VRF CALLBACK -------------------
     function fulfillRandomness(bytes32 requestId, uint256 randomness) internal override {
-        uint256 disputeId = requestIdToDeal[requestId];
+        uint256 disputeId = requestIdToDispute[requestId];
 
         Candidate[] memory experiencedPool = experiencedPoolTemporary[disputeId];
         Candidate[] memory newbiePool = newbiePoolTemporary[disputeId];
@@ -239,13 +241,15 @@ contract JurorManager is Ownable {
         // pick experienced jurors
         for (uint256 i = 0; i < expNeeded; i++) {
             uint256 pickIdx = rand % experiencedPool.length;
-            selected[idx++] = experiencedPool[pickIdx]
+            selected[idx++] = experiencedPool[pickIdx];
 
             // swap-remove
             experiencedPool[pickIdx] = experiencedPool[experiencedPool.length - 1];
-            assembly { mstore(experiencedPool, sub(mload(experiencedPool), 1)) }
+            assembly {
+                mstore(experiencedPool, sub(mload(experiencedPool), 1))
+            }
 
-            rand = uint256(keccak256(abi.encodePacked(rand, i)));
+            rand = uint256(keccak256(abi.encodePacked(rand, i))) % experiencedPool.length;
         }
 
         // pick newbie jurors
@@ -255,9 +259,11 @@ contract JurorManager is Ownable {
 
             // swap-remove
             newbiePool[pickIdx] = newbiePool[newbiePool.length - 1];
-            assembly { mstore(newbiePool, sub(mload(newbiePool), 1)) }
+            assembly {
+                mstore(newbiePool, sub(mload(newbiePool), 1))
+            }
 
-            rand = uint256(keccak256(abi.encodePacked(rand, i)));
+            rand = uint256(keccak256(abi.encodePacked(rand, i))) % newbiePool.length;
         }
 
         // mark jurors active
@@ -266,7 +272,7 @@ contract JurorManager is Ownable {
         }
 
         disputeJurors[disputeId] = selected;
-       
+
         emit JurorsSelected(disputeId, selected);
     }
 
