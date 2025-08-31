@@ -45,6 +45,7 @@ abstract contract DisputeStorage {
         address jurorAddress;
         uint256 stakeAmount;
         uint256 reputation;
+        uint256 missedVotesCount;
     }
 
     // Keeps track of the stake amount and reputation at selection
@@ -99,6 +100,9 @@ abstract contract DisputeStorage {
     mapping(address jurorAddress => uint256[] disputeIds) public jurorDisputeHistory;
 
     // Candidates and voting
+    uint256 public lambda = 0.2e18;  // Smoothing factor between 0 and 1 scaled by 1e18
+    uint256 public k = 5;  // Step size 
+    uint256 public noVoteK = 8; // Step size for not failing to vote
     uint256 public votingPeriod = 48 hours;
     mapping(uint256 disputeId => Candidate[]) public disputeJurors;
     mapping(uint256 disputeId => Timer) public disputeTimer;
@@ -109,6 +113,7 @@ abstract contract DisputeStorage {
     uint256 public minStakeAmount = 1000e18;
     uint256 public maxStakeAmount = 1_000_000_000e18;
     uint256 public slashPercentage = 1000; // 10% by default
+    uint256 public noVoteSlashPercentage = 2000; // 20% by default
 
     // Chainlink VRF
     uint32 public callbackGasLimit = 500000;
