@@ -8,66 +8,19 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {ConfirmedOwner} from "@chainlink/contracts/src/v0.8/shared/access/ConfirmedOwner.sol";
 import {VRFV2WrapperConsumerBase} from "@chainlink/contracts/src/v0.8/vrf/VRFV2WrapperConsumerBase.sol";
 import {LinkTokenInterface} from "@chainlink/contracts/src/v0.8/shared/interfaces/LinkTokenInterface.sol";
+import {DisputeManager} from "./DisputeManger.sol";
 
-contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner {
+contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManager {
     using SafeERC20 for IERC20;
 
-    /*//////////////////////////////////////////////////////////////
-                                STRUCTS
-    //////////////////////////////////////////////////////////////*/
-    struct Juror {
-        address jurorAddress;
-        uint256 stakeAmount;
-        uint256 reputation;
-    }
-
-    // To keep track of the stake amount and reputation as at when selected
-    struct Candidate {
-        uint256 disputeId;
-        address jurorAddress;
-        uint256 stakeAmount;
-        uint256 reputation;
-        uint256 score;
-    }
-
-    struct RequestStatus {
-        uint256 paid; // amount paid in link
-        bool fulfilled; // whether the request has been successfully fulfilled
-        uint256[] randomWords;
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                                STATE
-    //////////////////////////////////////////////////////////////*/
-    uint32 public callbackGasLimit = 500000;
-    uint16 public requestConfirmations = 3;
-    uint32 public numWords = 1;
-    address public linkAddress;
-    address public wrapperAddress;
-
-    uint256 public minStakeAmount = 1000e18;
-    uint256 public maxStakeAmount = 1_000_000_000e18;
-
-    // past requests Id.
-    uint256[] public requestIds;
-    uint256 public lastRequestId;
-
-    mapping(address => Juror) public jurors;
-    mapping(uint256 => Candidate[]) public disputeJurors;
-    mapping(uint256 => mapping(address => uint256)) public disputeVotes;
-    mapping(address => bool) public isJurorActive;
-
-    Juror[] public allJurors;
-
-    IERC20 public bloomToken;
-
-    // For randomness;
+     // For randomness;
     mapping(uint256 => RequestStatus) public s_requests; /* requestId --> requestStatus */
     mapping(uint256 => Candidate[]) private experiencedPoolTemporary;
     mapping(uint256 => Candidate[]) private newbiePoolTemporary;
     mapping(uint256 => uint256) private experienceNeededByDispute;
     mapping(uint256 => uint256) private newbieNeededByDispute;
     mapping(uint256 => uint256) private requestIdToDispute;
+   
 
     /*//////////////////////////////////////////////////////////////
                                 ERRORS
@@ -95,9 +48,10 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner {
     /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
-    constructor(address _bloomTokenAddress, address _linkAddress, address _wrapperAddress)
+    constructor(address _bloomTokenAddress, address _linkAddress, address _wrapperAddress, address _escrowAddress, address _feeControllerAddress)
         ConfirmedOwner(msg.sender)
         VRFV2WrapperConsumerBase(_linkAddress, _wrapperAddress)
+        DisputeManager(_escrowAddress, _feeControllerAddress)
     {
        
         bloomToken = IERC20(_bloomTokenAddress);
@@ -316,8 +270,15 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner {
         emit JurorsSelected(disputeId, selected);
     }
 
-    function vote(uint256 dealId) external {
-        // Code for the selected jurors to vote
+    function vote(uint256 disputeId) external {
+        // Make sure that the caller is one of the selected juror for the dispute
+
+        // Then you vote
+
+        // Emit event
+
+
+
     }
 
     function finishDispute(uint256 dealId) external onlyOwner {

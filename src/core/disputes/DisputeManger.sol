@@ -1,34 +1,23 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.20;
 
+import {TypesLib} from "../../library/TypesLib.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IBloomEscrow} from "../../interfaces/IBloomEscrow.sol";
 import {IFeeController} from "../../interfaces/IFeeController.sol";
-import {TypesLib} from "../../library/TypesLib.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+
+import {DisputeStorage} from "./DisputeStorage.sol";
 
 /// @title Dispute Manager for Bloom Escrow
 /// @notice Handles disputes and evidence for deals in BloomEscrow
-contract DisputeManager {
+abstract contract DisputeManager is DisputeStorage {
 
     using SafeERC20 for IERC20;
 
     //////////////////////////
-    // ENUMS
-    //////////////////////////
-
-    enum EvidenceType {
-        TEXT,
-        IMAGE,
-        VIDEO,
-        AUDIO,
-        DOCUMENT
-    }
-
-    //////////////////////////
     // ERRORS
     //////////////////////////
-
     error DisputeManager__CannotDispute();
     error DisputeManager__CannotAddEvidence();
     error DisputeManager__NotParticipant();
@@ -52,36 +41,6 @@ contract DisputeManager {
         
     );
 
-    //////////////////////////
-    // STRUCTS
-    //////////////////////////
-
-    struct Evidence {
-        uint256 dealId;
-        address uploader;
-        string uri;
-        uint256 timestamp;
-        EvidenceType evidenceType;
-        string description;
-        bool removed;
-    }
-
-    struct Dispute {
-        uint256 dealId;
-        address initiator;
-        address winner;
-    }
-
-    //////////////////////////
-    // STATE VARIABLES
-    //////////////////////////
-
-    IBloomEscrow public bloomEscrow;
-    IFeeController public feeController;
-
-    uint256 public disputeId;
-    mapping(uint256 => Dispute) public disputes;
-    mapping(uint256 => mapping(address => Evidence[])) public dealEvidences;
 
     //////////////////////////
     // CONSTRUCTOR
