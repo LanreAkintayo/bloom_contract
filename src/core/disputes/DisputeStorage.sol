@@ -19,11 +19,6 @@ abstract contract DisputeStorage {
         DOCUMENT
     }
 
-    enum VotingFor {
-        SENDER,
-        RECEIVER
-    }
-
     //////////////////////////
     // STRUCTS
     //////////////////////////
@@ -69,7 +64,7 @@ abstract contract DisputeStorage {
         address jurorAddress;
         uint256 disputeId;
         uint256 dealId;
-        VotingFor support;
+        address support;
     }
 
     //////////////////////////
@@ -95,8 +90,9 @@ abstract contract DisputeStorage {
     mapping(address jurorAddress => uint256[] disputeIds) public jurorDisputeHistory;
 
     // Candidates and voting
-    mapping(uint256 => Candidate[]) public disputeJurors;
+    mapping(uint256 disputeId => Candidate[]) public disputeJurors;
     mapping(uint256 disputeId => mapping(address jurorAddress => Vote)) public disputeVotes;
+    mapping(uint256 disputeId => Vote[]) public allDisputeVotes;
 
     // Staking rules
     uint256 public minStakeAmount = 1000e18;

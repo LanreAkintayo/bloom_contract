@@ -34,18 +34,22 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
     error JurorManager__ThresholdMismatched();
     error JurorManager__RequestNotFound();
     error JurorManager__NotEligible();
+    error JurorManager__AlreadyVoted();
+    error JurorManager__MaxVoteExceeded();
 
 
     /*//////////////////////////////////////////////////////////////
                                 EVENTS
     //////////////////////////////////////////////////////////////*/
     event JurorRegistered(address indexed juror, uint256 stakeAmount);
-    event MinStakeAmountUpdated(uint256 newMinStakeAmount);
-    event MaxStakeAmountUpdated(uint256 newMaxStakeAmount);
-    event MoreStaked(address juror, uint256 additionalStaked);
+    event MinStakeAmountUpdated(uint256 indexed newMinStakeAmount);
+    event MaxStakeAmountUpdated(uint256 indexed newMaxStakeAmount);
+    event MoreStaked(address indexed juror, uint256 indexed additionalStaked);
     event JurorsSelected(uint256 indexed disputeId, Candidate[] indexed selected);
     event RequestSent(uint256 requestId, uint32 numWords);
     event RequestFulfilled(uint256 requestId, uint256[] randomWords, uint256 payment);
+    event Voted(uint256 indexed disputeId, address indexed jurorAddress, address indexed support);
+
 
     /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
@@ -278,25 +282,32 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
         emit JurorsSelected(disputeId, selected);
     }
 
-    function vote(uint256 disputeId, Vote _vote) external {
+    function vote(uint256 disputeId, address support) external {
         // Make sure that the caller is one of the selected juror for the dispute
         bool isEligible = checkVoteEligibility(disputeId, msg.sender);
+        uint256 correspondingDealId = disputes[disputeId].dealId;
 
         if (!isEligible){
             revert JurorManager__NotEligible();
         }
 
+        // Make sure voter has not voted before;
+        if (disputeVotes[disputeId][msg.sender].jurorAddress != address(0)){
+            revert JurorManager__AlreadyVoted();
+        }
+
+        // Make sure that the number of votes is equal to the number of candidates selected to vote;
+        if (allDisputeVotes[disputeId].length + 1 > disputeJurors[disputeId].length ){
+            revert JurorManager__MaxVoteExceeded();
+        }
         // Then you vote
-        disputeVotes[disputeId][msg.sender] = _vote;
+        Vote memory newVote = Vote(msg.sender, disputeId, correspondingDealId, support);
 
-
-        // Make sure that they can only vote once.
-
+        disputeVotes[disputeId][msg.sender] = newVote;
+        allDisputeVotes[disputeId].push(newVote);
 
         // Emit event
-
-
-
+        emit Voted(disputeId, msg.sender, support);
     }
 
     function checkVoteEligibility(uint256 disputeId, address voter) public view returns(bool isEligible){
@@ -310,6 +321,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
             }
         }   
     }
+    
 
     function finishDispute(uint256 dealId) external onlyOwner {
         // Code to finalize the dispute and distribute rewards/penalties
