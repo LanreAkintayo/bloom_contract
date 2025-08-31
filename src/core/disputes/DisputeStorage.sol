@@ -19,6 +19,11 @@ abstract contract DisputeStorage {
         DOCUMENT
     }
 
+    enum VotingFor {
+        SENDER,
+        RECEIVER
+    }
+
     //////////////////////////
     // STRUCTS
     //////////////////////////
@@ -60,6 +65,13 @@ abstract contract DisputeStorage {
         uint256[] randomWords;
     }
 
+    struct Vote {
+        address jurorAddress;
+        uint256 disputeId;
+        uint256 dealId;
+        VotingFor support;
+    }
+
     //////////////////////////
     // STATE VARIABLES
     //////////////////////////
@@ -71,18 +83,20 @@ abstract contract DisputeStorage {
 
     // Disputes and evidences
     uint256 public disputeId;
-    mapping(uint256 => Dispute) public disputes;
-    mapping(uint256 => mapping(address => Evidence[])) public dealEvidences;
+    mapping(uint256 disputeId => Dispute) public disputes;
+
+    // address can either be the sender or the proposed receiver
+    mapping(uint256 dealId => mapping(address => Evidence[])) public dealEvidences;
 
     // Jurors
-    mapping(address => Juror) public jurors;
+    mapping(address jurorAddress => Juror) public jurors;
     Juror[] public allJurors;
-    mapping(address => bool) public isJurorActive;
-    mapping(address => uint256[]) public jurorDisputeHistory;
+    mapping(address jurorAddress => bool) public isJurorActive;
+    mapping(address jurorAddress => uint256[] disputeIds) public jurorDisputeHistory;
 
     // Candidates and voting
     mapping(uint256 => Candidate[]) public disputeJurors;
-    mapping(uint256 => mapping(address => uint256)) public disputeVotes;
+    mapping(uint256 disputeId => mapping(address jurorAddress => Vote)) public disputeVotes;
 
     // Staking rules
     uint256 public minStakeAmount = 1000e18;

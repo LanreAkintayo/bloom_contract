@@ -33,6 +33,8 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
     error JurorManager__AlreadyAssignedJurors();
     error JurorManager__ThresholdMismatched();
     error JurorManager__RequestNotFound();
+    error JurorManager__NotEligible();
+
 
     /*//////////////////////////////////////////////////////////////
                                 EVENTS
@@ -120,7 +122,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
         uint256 maxReputation,
         uint256 alphaFP,
         uint256 betaFP
-    ) public view returns (uint256) {
+    ) public pure returns (uint256) {
         uint256 score = (alphaFP * stakeAmount / _maxStake) + (betaFP * (reputation + 1) / (maxReputation + 1));
         return score;
     }
@@ -237,6 +239,9 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
             uint256 pickIdx = rand % experiencedPool.length;
             selected[idx++] = experiencedPool[pickIdx];
 
+            // Track all the disputes per juror
+            jurorDisputeHistory[experiencedPool[pickIdx].jurorAddress].push(disputeId);
+
             // swap-remove
             experiencedPool[pickIdx] = experiencedPool[experiencedPool.length - 1];
             assembly {
@@ -250,6 +255,9 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
         for (uint256 i = 0; i < newbieNeeded; i++) {
             uint256 pickIdx = rand % newbiePool.length;
             selected[idx++] = newbiePool[pickIdx];
+
+               // Track all the disputes per juror
+            jurorDisputeHistory[experiencedPool[pickIdx].jurorAddress].push(disputeId);
 
             // swap-remove
             newbiePool[pickIdx] = newbiePool[newbiePool.length - 1];
@@ -270,15 +278,37 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
         emit JurorsSelected(disputeId, selected);
     }
 
-    function vote(uint256 disputeId) external {
+    function vote(uint256 disputeId, Vote _vote) external {
         // Make sure that the caller is one of the selected juror for the dispute
+        bool isEligible = checkVoteEligibility(disputeId, msg.sender);
+
+        if (!isEligible){
+            revert JurorManager__NotEligible();
+        }
 
         // Then you vote
+        disputeVotes[disputeId][msg.sender] = _vote;
+
+
+        // Make sure that they can only vote once.
+
 
         // Emit event
 
 
 
+    }
+
+    function checkVoteEligibility(uint256 disputeId, address voter) public view returns(bool isEligible){
+
+        Candidate[] memory disputeVoters = disputeJurors[disputeId];
+        
+        for (uint256 i = 0; i < disputeVoters.length; i++){
+            if (disputeVoters[i].jurorAddress == voter){
+                isEligible = true;
+                break;
+            }
+        }   
     }
 
     function finishDispute(uint256 dealId) external onlyOwner {
