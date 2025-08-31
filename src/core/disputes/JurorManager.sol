@@ -36,6 +36,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
     error JurorManager__NotEligible();
     error JurorManager__AlreadyVoted();
     error JurorManager__MaxVoteExceeded();
+    error JurorManager__NotFinished();
 
 
     /*//////////////////////////////////////////////////////////////
@@ -278,6 +279,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
         }
 
         disputeJurors[disputeId] = selected;
+        disputeTimer[disputeId] = Timer(disputeId, block.timestamp + votingPeriod, 0);
 
         emit JurorsSelected(disputeId, selected);
     }
@@ -323,8 +325,117 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
     }
     
 
-    function finishDispute(uint256 dealId) external onlyOwner {
-        // Code to finalize the dispute and distribute rewards/penalties
+    function finishDispute(uint256 _disputeId) external onlyOwner {
+        // Check if voting time has elapsed;
+        Timer memory disputeTimer = disputeTimer[_disputeId];
+
+        if (block.timestamp < disputeTimer.endingTime) {
+            revert JurorManager__NotFinished();
+        }
+        Candidate[] memory selectedJurors = disputeJurors[disputeId];
+        Vote[] memory allVotes = allDisputeVotes[_disputeId];
+
+        if (selectedJurors.length != allVotes.length){
+            // Get the voter that did not vote and penalize them later;
+        } 
+
+        // Determine the winner;
+        (address winner, address loser, uint256 winnerCount, uint256 loserCount) = _determineWinner(_disputeId, allVotes);
+
+        // Distribute the reward;
+        _distributeReward(_disputeId, winner, loser, winnerCount, loserCount);
+
+
+
+        // Check if all jurors have voted;
+
+
+
+        // Determine the winning juror
+
+        // slash staked amount for losing juror and distribute disputeFee
+
+        // If a juror did not vote, update the stuff and increment the count.abi
+        // If their count is equal to three. mark them as inactive.
+
+        // update everyone's reputation accordingly
+
+        // emit the event
+    }
+
+    // function penalizeJuror(uint256 )
+
+
+    function _distributeReward(uint256 _disputeId, address winner, address loser, uint256 winnerCount, uint256 loserCount) internal {
+        uint256 totalAmountSlashed;
+        uint256 totalWinnerStakedAmount;
+        Vote[] memory allVotes = allDisputeVotes[_disputeId];
+        Candidate[] memory selectedJurors = disputeJurors[_disputeId];
+        Candidate[] memory winnersAlone = new Candidate[](winnerCount);
+        uint256 winnerId = 0;
+
+        // Calculate the total amount slashed from the losers
+        for (uint256 i = 0; i < selectedJurors.length; i++) {
+            // Make sure you deal with only the jurors that voted;
+            Candidate memory currentCandidate = selectedJurors[i];
+            if (disputeVotes[_disputeId][currentCandidate.jurorAddress].jurorAddress != address(0)){
+                uint256 stakedAmount = currentCandidate.stakeAmount;
+                if (disputeVotes[_disputeId][currentCandidate.jurorAddress].support == loser){
+                    totalAmountSlashed += stakedAmount * slashPercentage / MAX_PERCENT;
+                    jurors[currentCandidate.jurorAddress].stakeAmount -= totalAmountSlashed;
+
+                    // We don't need to update the Candidate struct because it is only used to note the staked value as at when selected to vote.
+                }
+                else{
+                     totalWinnerStakedAmount += currentCandidate.stakeAmount;
+                     winnersAlone[winnerId] = (currentCandidate);
+                     winnerId++;
+                }
+            }
+        }
+
+        // Let's distribute to the winners;
+        for (uint256 i = 0; i < winnersAlone.length; i++){
+            Candidate memory currentCandidate = winnersAlone[i];
+            uint256 rewardAmount = (currentCandidate.stakeAmount * totalAmountSlashed) / totalWinnerStakedAmount;
+            jurors[currentCandidate.jurorAddress].stakeAmount += rewardAmount;
+
+        }
+
+        // Add to the balance of all the jurors that voted correctly;
+
+
+        // Each voter gets rewarded;
+        // Votes[] memory voter
+    }
+
+    function _determineWinner(uint256 _disputeId, Vote[] memory allVotes) internal view returns (address winner, address loser, uint256 winnerCount, uint256 loserCount) {
+        Dispute memory currentDispute = disputes[_disputeId];
+
+        uint256 initiatorCount = 0;
+        uint256 againstCount = 0;
+
+        for (uint256 i = 0; i < allVotes.length; i++) {
+            if (allVotes[i].support == currentDispute.initiator) {
+                initiatorCount++;
+            } else {
+                againstCount++;
+            }
+        }
+        if (initiatorCount > againstCount) {
+            winner = currentDispute.initiator;
+            loser =  winner == currentDispute.sender ? currentDispute.receiver : currentDispute.sender;
+            winnerCount = initiatorCount;
+            loserCount = againstCount;
+        } else {
+            winner = currentDispute.initiator == currentDispute.sender ? currentDispute.receiver : currentDispute.sender;
+            loser = currentDispute.initiator; 
+            winnerCount = againstCount;
+            loserCount = initiatorCount;
+        }
+    }
+    function addJuror(uint256 disputeId) external onlyOwner {
+        // Incase there is a tie breaker, this will help in resolving that.
     }
 
     function _updateReputation(uint256 dealId, address juror, bool wonDispute) internal {
@@ -346,4 +457,6 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
         maxStakeAmount = _maxStakeAmount;
         emit MaxStakeAmountUpdated(_maxStakeAmount);
     }
+
+    // function updateVotingPeriod(uint256 _votingPeriod) external onlyOwner
 }

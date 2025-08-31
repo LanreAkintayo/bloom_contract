@@ -36,6 +36,8 @@ abstract contract DisputeStorage {
     struct Dispute {
         uint256 dealId;
         address initiator;
+        address sender;
+        address receiver;
         address winner;
     }
 
@@ -67,6 +69,12 @@ abstract contract DisputeStorage {
         address support;
     }
 
+    struct Timer {
+        uint256 disputeId;
+        uint256 endingTime;
+        uint256 extendedBy;
+    }
+
     //////////////////////////
     // STATE VARIABLES
     //////////////////////////
@@ -78,6 +86,7 @@ abstract contract DisputeStorage {
 
     // Disputes and evidences
     uint256 public disputeId;
+    uint256 public constant MAX_PERCENT  = 10_000; // This represents 100%
     mapping(uint256 disputeId => Dispute) public disputes;
 
     // address can either be the sender or the proposed receiver
@@ -90,13 +99,16 @@ abstract contract DisputeStorage {
     mapping(address jurorAddress => uint256[] disputeIds) public jurorDisputeHistory;
 
     // Candidates and voting
+    uint256 public votingPeriod = 48 hours;
     mapping(uint256 disputeId => Candidate[]) public disputeJurors;
+    mapping(uint256 disputeId => Timer) public disputeTimer;
     mapping(uint256 disputeId => mapping(address jurorAddress => Vote)) public disputeVotes;
     mapping(uint256 disputeId => Vote[]) public allDisputeVotes;
 
     // Staking rules
     uint256 public minStakeAmount = 1000e18;
     uint256 public maxStakeAmount = 1_000_000_000e18;
+    uint256 public slashPercentage = 1000; // 10% by default
 
     // Chainlink VRF
     uint32 public callbackGasLimit = 500000;

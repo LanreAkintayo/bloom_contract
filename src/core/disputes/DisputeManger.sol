@@ -75,7 +75,7 @@ abstract contract DisputeManager is DisputeStorage {
             revert DisputeManager__CannotDispute();
         }
 
-        Dispute memory dispute = Dispute({dealId: dealId, initiator: msg.sender, winner: address(0)});
+        Dispute memory dispute = Dispute({dealId: dealId, initiator: msg.sender, sender: deal.sender, receiver: deal.receiver, winner: address(0)});
 
         disputes[disputeId] = dispute;
         disputeId++;
