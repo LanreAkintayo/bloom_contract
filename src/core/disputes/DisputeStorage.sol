@@ -55,6 +55,7 @@ abstract contract DisputeStorage {
         uint256 stakeAmount;
         uint256 reputation;
         uint256 score;
+        bool missed;
     }
 
     struct RequestStatus {

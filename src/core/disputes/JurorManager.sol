@@ -36,6 +36,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
     error JurorManager__AlreadyVoted();
     error JurorManager__MaxVoteExceeded();
     error JurorManager__NotFinished();
+    error JurorManager__DisputeNotEnded();
 
     /*//////////////////////////////////////////////////////////////
                                 EVENTS
@@ -48,6 +49,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
     event RequestSent(uint256 requestId, uint32 numWords);
     event RequestFulfilled(uint256 requestId, uint256[] randomWords, uint256 payment);
     event Voted(uint256 indexed disputeId, address indexed jurorAddress, address indexed support);
+    event AdminParticipatedInDispute(uint256 indexed _disputeId);
 
     /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
@@ -181,11 +183,11 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
 
                 if (score >= thresholdFP) {
                     experiencedPoolTemp[expIndex++] =
-                        Candidate(disputeId, juror.jurorAddress, juror.stakeAmount, juror.reputation, score);
+                        Candidate(disputeId, juror.jurorAddress, juror.stakeAmount, juror.reputation, score, false);
                     countAbove++;
                 } else {
                     newbiePoolTemp[newIndex++] =
-                        Candidate(disputeId, juror.jurorAddress, juror.stakeAmount, juror.reputation, score);
+                        Candidate(disputeId, juror.jurorAddress, juror.stakeAmount, juror.reputation, score, false);
                 }
             }
         }
@@ -336,18 +338,15 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
         Vote[] memory allVotes = allDisputeVotes[_disputeId];
 
         // Determine the winner;
-        (bool tie, address winner, , uint256 winnerCount, ) =
-            _determineWinner(_disputeId, allVotes);
+        (bool tie, address winner,, uint256 winnerCount,) = _determineWinner(_disputeId, allVotes);
 
         // Update the reward and reputation accordingly
         _distributeRewardAndReputation(tie, _disputeId, winner, winnerCount);
 
         // Update all the states
-        
+        // VOters should be marked as active. All of them
 
         // Emit events;
-
-      
     }
 
     // function penalizeJuror(uint256 )
@@ -424,8 +423,6 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
         }
     }
 
-    function _updateReputation() internal {}
-
     function _determineWinner(uint256 _disputeId, Vote[] memory allVotes)
         internal
         view
@@ -456,8 +453,23 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
         );
     }
 
-    function addJuror(uint256 disputeId) external onlyOwner {
+    function addJuror(uint256 _disputeId, uint256 numJurors) external onlyOwner {
         // Incase there is a tie breaker, this will help in resolving that.
+
+        // This will be called only after the voting period has elapsed
+         Timer memory timer = disputeTimer[_disputeId];
+        if (block.timestamp < timer.endingTime) {
+            revert JurorManager__DisputeNotEnded();
+        }
+
+        // If you have 0 missed vote and you are inactive. You will be selected here. Randomness is not really prioritized at this point.
+
+
+
+
+        // Extend the time
+
+        // Mark the novoters as missed.
         // This will be called after the first round of selection.
         // Candidate list will get updated here
         // We should penalize the candidates that is forcing us to add more juror.
@@ -465,12 +477,36 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
 
     function adminParticipateInDispute(uint256 _disputeId) external onlyOwner {
         // To be called by admins
-        // Admin is added as candidate. This will be called only after the second round of selection.
-        // Admin will be added to the candidate list
-    }
+        // Admin is added as candidate. This will be called only after the voting period has elapsed
+        Timer memory timer = disputeTimer[_disputeId];
+        if (block.timestamp < timer.endingTime + timer.extendedBy) {
+            revert JurorManager__DisputeNotEnded();
+        }
 
-    function _updateReputation(uint256 dealId, address juror, bool wonDispute) internal {
-        // Code to update juror reputation based on dispute outcome
+        // Admin will be added to the candidate list
+        Candidate[] storage selectedJurors = disputeJurors[_disputeId];
+
+        // Mark all the jurors that did not vote as missed;
+        for (uint256 i = 0; i < selectedJurors.length; i++) {
+            address jurorAddress = selectedJurors[i].jurorAddress;
+            if (disputeVotes[_disputeId][jurorAddress].support == address(0)) {
+                selectedJurors[i].missed = true;
+            }
+        }
+
+        // Add admin as juror
+        selectedJurors.push(
+            Candidate({
+                jurorAddress: owner(),
+                stakeAmount: 0,
+                disputeId: _disputeId,
+                reputation: 0,
+                score: 0,
+                missed: false
+            })
+        );
+
+        emit AdminParticipatedInDispute(_disputeId);
     }
 
     function updateMinStakeAmount(uint256 _minStakeAmount) external onlyOwner {
