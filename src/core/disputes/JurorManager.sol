@@ -5,8 +5,11 @@ import {TypesLib} from "../../library/TypesLib.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ConfirmedOwner} from "@chainlink/contracts/src/v0.8/shared/access/ConfirmedOwner.sol";
+import {VRFV2WrapperConsumerBase} from "@chainlink/contracts/src/v0.8/vrf/VRFV2WrapperConsumerBase.sol";
+import {LinkTokenInterface} from "@chainlink/contracts/src/v0.8/shared/interfaces/LinkTokenInterface.sol";
 
-contract JurorManager is Ownable {
+contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner {
     using SafeERC20 for IERC20;
 
     /*//////////////////////////////////////////////////////////////
@@ -27,11 +30,27 @@ contract JurorManager is Ownable {
         uint256 score;
     }
 
+    struct RequestStatus {
+        uint256 paid; // amount paid in link
+        bool fulfilled; // whether the request has been successfully fulfilled
+        uint256[] randomWords;
+    }
+
     /*//////////////////////////////////////////////////////////////
                                 STATE
     //////////////////////////////////////////////////////////////*/
+    uint32 public callbackGasLimit = 500000;
+    uint16 public requestConfirmations = 3;
+    uint32 public numWords = 1;
+    address public linkAddress;
+    address public wrapperAddress;
+
     uint256 public minStakeAmount = 1000e18;
     uint256 public maxStakeAmount = 1_000_000_000e18;
+
+    // past requests Id.
+    uint256[] public requestIds;
+    uint256 public lastRequestId;
 
     mapping(address => Juror) public jurors;
     mapping(uint256 => Candidate[]) public disputeJurors;
@@ -43,11 +62,12 @@ contract JurorManager is Ownable {
     IERC20 public bloomToken;
 
     // For randomness;
-    mapping(uint256 => Candidate) private experiencedPoolTemporary;
-    mapping(uint256 => Candidate) private newbiePoolTemporary;
+    mapping(uint256 => RequestStatus) public s_requests; /* requestId --> requestStatus */
+    mapping(uint256 => Candidate[]) private experiencedPoolTemporary;
+    mapping(uint256 => Candidate[]) private newbiePoolTemporary;
     mapping(uint256 => uint256) private experienceNeededByDispute;
     mapping(uint256 => uint256) private newbieNeededByDispute;
-    mapping(uint256 => bytes32) private requestIdToDispute;
+    mapping(uint256 => uint256) private requestIdToDispute;
 
     /*//////////////////////////////////////////////////////////////
                                 ERRORS
@@ -59,6 +79,7 @@ contract JurorManager is Ownable {
     error JurorManager__NotRegistered();
     error JurorManager__AlreadyAssignedJurors();
     error JurorManager__ThresholdMismatched();
+    error JurorManager__RequestNotFound();
 
     /*//////////////////////////////////////////////////////////////
                                 EVENTS
@@ -68,15 +89,20 @@ contract JurorManager is Ownable {
     event MaxStakeAmountUpdated(uint256 newMaxStakeAmount);
     event MoreStaked(address juror, uint256 additionalStaked);
     event JurorsSelected(uint256 indexed disputeId, Candidate[] indexed selected);
+    event RequestSent(uint256 requestId, uint32 numWords);
+    event RequestFulfilled(uint256 requestId, uint256[] randomWords, uint256 payment);
 
     /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
-    constructor(address _bloomTokenAddress) Ownable(msg.sender) {
-        if (_bloomTokenAddress == address(0)) {
-            revert JurorManager__ZeroAddress();
-        }
+    constructor(address _bloomTokenAddress, address _linkAddress, address _wrapperAddress)
+        ConfirmedOwner(msg.sender)
+        VRFV2WrapperConsumerBase(_linkAddress, _wrapperAddress)
+    {
+       
         bloomToken = IERC20(_bloomTokenAddress);
+        linkAddress = _linkAddress;
+        wrapperAddress = _wrapperAddress;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -172,7 +198,7 @@ contract JurorManager is Ownable {
 
         //// find max stake & reputation
         for (uint256 i = 0; i < allJurors.length; i++) {
-            Juror juror = allJurors[i];
+            Juror memory juror = allJurors[i];
 
             // Make sure that we can only select a juror that is currently inactive and their stake amount is greater than the minimum stake amount
             if (isJurorActive[juror.jurorAddress] && juror.stakeAmount >= minStakeAmount) {
@@ -183,7 +209,7 @@ contract JurorManager is Ownable {
 
         // compute selection scores and assign to pools
         for (uint256 i = 0; i < allJurors.length; i++) {
-            Juror juror = allJurors[i];
+            Juror memory juror = allJurors[i];
 
             if (isJurorActive[juror.jurorAddress] && juror.stakeAmount >= minStakeAmount) {
                 uint256 score =
@@ -191,11 +217,11 @@ contract JurorManager is Ownable {
 
                 if (score >= thresholdFP) {
                     experiencedPoolTemp[expIndex++] =
-                        Candidate(juror.jurorAddress, juror.stakeAmount, juror.reputation, score);
+                        Candidate(disputeId, juror.jurorAddress, juror.stakeAmount, juror.reputation, score);
                     countAbove++;
                 } else {
                     newbiePoolTemp[newIndex++] =
-                        Candidate(juror.jurorAddress, juror.stakeAmount, juror.reputation, score);
+                        Candidate(disputeId, juror.jurorAddress, juror.stakeAmount, juror.reputation, score);
                 }
             }
         }
@@ -219,13 +245,27 @@ contract JurorManager is Ownable {
         newbieNeededByDispute[disputeId] = newbieNeeded;
 
         // request randomness from Chainlink VRF
-        bytes32 requestId = requestRandomness(keyHash, fee);
+        uint256 requestId = requestRandomness(callbackGasLimit, requestConfirmations, numWords);
+        s_requests[requestId] = RequestStatus({
+            paid: VRF_V2_WRAPPER.calculateRequestPrice(callbackGasLimit),
+            randomWords: new uint256[](0),
+            fulfilled: false
+        });
+        requestIds.push(requestId);
+        lastRequestId = requestId;
+        emit RequestSent(requestId, numWords);
         requestIdToDispute[requestId] = disputeId;
     }
 
     // ------------------- VRF CALLBACK -------------------
-    function fulfillRandomness(bytes32 requestId, uint256 randomness) internal override {
-        uint256 disputeId = requestIdToDispute[requestId];
+    function fulfillRandomWords(uint256 _requestId, uint256[] memory _randomWords) internal override {
+        if (s_requests[_requestId].paid <= 0){
+            revert JurorManager__RequestNotFound();
+        }
+        s_requests[_requestId].fulfilled = true;
+
+        uint256 randomness = _randomWords[0];
+        uint256 disputeId = requestIdToDispute[_requestId];
 
         Candidate[] memory experiencedPool = experiencedPoolTemporary[disputeId];
         Candidate[] memory newbiePool = newbiePoolTemporary[disputeId];
