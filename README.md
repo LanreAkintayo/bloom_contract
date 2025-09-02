@@ -88,4 +88,8 @@ Fallback/receive functions
 -- Work on add juror
 -- Users that have more than 3 missed should not be selected as a juror
 -- finish dispute logic is not completed
--- 
+-- I should be able to extend and give the voters grace to vote but the moment I add new jurors, they won't be able to vote anymore.
+-- Not yet done anything to isDisputeCandidate
+-- Not done anything to missed or missedCount
+-- not done anything on startTime
+-- when finalizing dispute. Make sure you punish all the candidates with missed votes.

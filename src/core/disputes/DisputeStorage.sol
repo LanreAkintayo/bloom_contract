@@ -73,8 +73,9 @@ abstract contract DisputeStorage {
 
     struct Timer {
         uint256 disputeId;
-        uint256 endingTime;
-        uint256 extendedBy;
+        uint256 startTime;
+        uint256 standardVotingDuration;
+        uint256 extendDuration;
     }
 
     //////////////////////////
@@ -96,16 +97,20 @@ abstract contract DisputeStorage {
 
     // Jurors
     mapping(address jurorAddress => Juror) public jurors;
-    Juror[] public allJurors;
+    address[] public allJurorAddresses;
     mapping(address jurorAddress => bool) public isJurorActive;
     mapping(address jurorAddress => uint256[] disputeIds) public jurorDisputeHistory;
+
+    address[] public activeJurorAddresses;
+    mapping(address jurorAddrres => uint256 index) public jurorAddressIndex;
 
     // Candidates and voting
     uint256 public lambda = 0.2e18;  // Smoothing factor between 0 and 1 scaled by 1e18
     uint256 public k = 5;  // Step size 
     uint256 public noVoteK = 8; // Step size for not failing to vote
     uint256 public votingPeriod = 48 hours;
-    mapping(uint256 disputeId => Candidate[]) public disputeJurors;
+    mapping(uint256 disputeId => address[]) public disputeJurors;
+    mapping(uint256 disputeId => mapping(address jurorAddress => Candidate)) public isDisputeCandidate;
     mapping(uint256 disputeId => Timer) public disputeTimer;
     mapping(uint256 disputeId => mapping(address jurorAddress => Vote)) public disputeVotes;
     mapping(uint256 disputeId => Vote[]) public allDisputeVotes;
