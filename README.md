@@ -85,11 +85,20 @@ Internal/private functions
 Fallback/receive functions
 
 
--- Work on add juror
--- Users that have more than 3 missed should not be selected as a juror
+
+
 -- finish dispute logic is not completed
--- I should be able to extend and give the voters grace to vote but the moment I add new jurors, they won't be able to vote anymore.
--- Not yet done anything to isDisputeCandidate
+
 -- Not done anything to missed or missedCount
 -- not done anything on startTime
 -- when finalizing dispute. Make sure you punish all the candidates with missed votes.
+-- Change the rule to ensure that they can handle more than one dispute at the same time
+-- For the stake amount, always ensure that before they get selected, if they vote wrongly, there would still be amount of stake that will be slashed from their stake amount
+-- To remove stake, they cannot remove from what they have in store.
+
+
+
+// Conditions to pop from active juror addresses
+1. You are currently selected for a dispute
+2. You have missed votes up to 3 times
+3. You 

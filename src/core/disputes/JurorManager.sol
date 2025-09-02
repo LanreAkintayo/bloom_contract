@@ -39,6 +39,8 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
     error JurorManager__NotFinished();
     error JurorManager__DisputeNotEnded();
     error JurorManager__NotInVotingPeriod();
+    error JurorManager__VotingPeriodExpired();
+    error JurorManager__NotInStandardVotingPeriod();
 
     /*//////////////////////////////////////////////////////////////
                                 EVENTS
@@ -53,6 +55,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
     event Voted(uint256 indexed disputeId, address indexed jurorAddress, address indexed support);
     event AdminParticipatedInDispute(uint256 indexed _disputeId);
     event JurorAdded(uint256 indexed _disputeId, address[] indexed newJurors);
+    event StandardVotingDurationExtended(uint256 indexed _disputeId, uint256 indexed _extendDuration);
 
     /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
@@ -101,8 +104,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
         allJurorAddresses.push(msg.sender);
 
         // Add a new fresh juror to the activejurorAddresses
-        jurorAddressIndex[msg.sender] = activeJurorAddresses.length;
-        activeJurorAddresses.push(msg.sender);
+        _pushToActiveJurorAddresses(msg.sender);
 
         emit JurorRegistered(msg.sender, stakeAmount);
     }
@@ -318,6 +320,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
         // mark jurors active
         for (uint256 i = 0; i < selected.length; i++) {
             isJurorActive[selected[i]] = true;
+            _popFromActiveJurorAddresses(selected[i]);
         }
 
         // As per they are active here, let me remove from them from the available jurors.
@@ -332,6 +335,10 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
         // Make sure that the caller is one of the selected juror for the dispute
         bool isEligible = checkVoteEligibility(disputeId, msg.sender);
         uint256 correspondingDealId = disputes[disputeId].dealId;
+        Timer memory timer = disputeTimer[disputeId];
+        if (block.timestamp > timer.startTime + timer.standardVotingDuration + timer.extendDuration) {
+            revert JurorManager__VotingPeriodExpired();
+        }
 
         if (!isEligible) {
             revert JurorManager__NotEligible();
@@ -446,22 +453,40 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
                 int256 newReputation = int256(oldReputation) - (int256(lambda) * int256(noVoteK)) / 1e18;
 
                 juror.reputation = newReputation > 0 ? uint256(newReputation) : 0;
-                juror.missedVotesCount += 1;
+                Candidate storage candidate = isDisputeCandidate[_disputeId][currentJurorAddress];
+
+                // Set to missed if it is not set yet.
+                if (!candidate.missed) {
+                    candidate.missed = true;
+                    juror.missedVotesCount += 1;
+
+                    if (juror.missedVotesCount >= missedVoteThreshold) {
+                        _popFromActiveJurorAddresses(currentJurorAddress);
+                    }
+                }
             }
         }
 
         // Let's distribute to the winners;
         for (uint256 i = 0; i < winnersAlone.length; i++) {
-            Candidate memory currentCandidate = isDisputeCandidate[_disputeId][winnersAlone[i]];
+            address currentAddress = winnersAlone[i];
+            Candidate memory currentCandidate = isDisputeCandidate[_disputeId][currentAddress];
+
             uint256 rewardAmount = (currentCandidate.stakeAmount * totalAmountSlashed) / totalWinnerStakedAmount;
 
-            Juror storage juror = jurors[currentCandidate.jurorAddress];
+            Juror storage juror = jurors[currentAddress];
             juror.stakeAmount += rewardAmount;
 
             // Update the reputation
             uint256 oldReputation = juror.reputation;
             int256 newReputation = int256(oldReputation) + (int256(lambda) * int256(k)) / 1e18;
             juror.reputation = newReputation > 0 ? uint256(newReputation) : 0;
+
+            // Change status back to ready to vote;
+            isJurorActive[currentAddress] = false;
+
+            // Push back to the array of activeJurorAddresses
+            _pushToActiveJurorAddresses(currentAddress);
         }
     }
 
@@ -508,7 +533,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
         }
 
         // Get a list of the jurors that are eligble for selection in this stage;
-        // You must not have more than 1 missed, you must be active (meaning that you should not be part of an ongoing dispute, you must not be part of the jurors for that dispute.)
+        // You must not 3+ missed, you must be active (meaning that you should not be part of an ongoing dispute, you must not be part of the jurors for that dispute.)
         address[] memory eligibleAddresses = _getEligibleJurorAddresses(_disputeId);
 
         // Selection will be done in this address of jurors;
@@ -556,13 +581,19 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
         // Clean up mapping
         delete jurorAddressIndex[jurorAddress];
     }
+    
+    function _pushToActiveJurorAddresses(address jurorAddress) internal {
+        // Add a new fresh juror to the activejurorAddresses
+        jurorAddressIndex[jurorAddress] = activeJurorAddresses.length;
+        activeJurorAddresses.push(jurorAddress);
+
+    }
+    
 
     function _addJurorsToCandidateList(uint256 _disputeId, address[] memory selectedJurorAddresses) internal {
-        //
         for (uint256 i = 0; i < selectedJurorAddresses.length; i++) {
             address jurorAddress = selectedJurorAddresses[i];
             Juror memory juror = jurors[jurorAddress];
-            disputeJurors[_disputeId].push(jurorAddress);
 
             if (jurorAddress == owner()) {
                 isDisputeCandidate[_disputeId][jurorAddress] = Candidate({
@@ -583,6 +614,10 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
                     missed: false
                 });
             }
+            // Set to active and pop from activeJurorAddresses
+            disputeJurors[_disputeId].push(jurorAddress);
+            isJurorActive[jurorAddress] = true;
+            _popFromActiveJurorAddresses(jurorAddress);
         }
     }
 
@@ -701,5 +736,14 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
         emit MaxStakeAmountUpdated(_maxStakeAmount);
     }
 
-    // function updateVotingPeriod(uint256 _votingPeriod) external onlyOwner
+    function extendStandardVotingDuration(uint256 _disputeId, uint256 _extendDuration) external onlyOwner {
+        Timer storage timer = disputeTimer[_disputeId];
+
+        if (block.timestamp > timer.startTime + timer.standardVotingDuration) {
+            revert JurorManager__NotInStandardVotingPeriod();
+        }
+
+        timer.extendDuration = _extendDuration;
+        emit StandardVotingDurationExtended(_disputeId, _extendDuration);
+    }
 }
