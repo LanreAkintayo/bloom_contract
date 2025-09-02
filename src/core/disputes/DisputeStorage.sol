@@ -101,12 +101,13 @@ abstract contract DisputeStorage {
     address[] public allJurorAddresses;
     mapping(address jurorAddress => bool) public isJurorActive;
     mapping(address jurorAddress => uint256[] disputeIds) public jurorDisputeHistory;
-
+    mapping(address jurorAddress => uint256) public ongoingDisputeCount;
     address[] public activeJurorAddresses;
     mapping(address jurorAddrres => uint256 index) public jurorAddressIndex;
 
     // Candidates and voting
     uint256 public missedVoteThreshold = 3;
+    uint256 public ongoingDisputeThreshold = 3;
     uint256 public lambda = 0.2e18;  // Smoothing factor between 0 and 1 scaled by 1e18
     uint256 public k = 5;  // Step size 
     uint256 public noVoteK = 8; // Step size for not failing to vote
