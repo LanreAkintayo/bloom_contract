@@ -164,8 +164,8 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
         // To verify the experiencedPoolSize with the one computed off-chain
         uint256 countAbove = 0;
 
-        address[] memory experiencedPoolTemp = new address[](allJurorAddresses.length);
-        address[] memory newbiePoolTemp = new address[](allJurorAddresses.length);
+        address[] memory experiencedPoolTemp = new address[](activeJurorAddresses.length);
+        address[] memory newbiePoolTemp = new address[](activeJurorAddresses.length);
         uint256 expIndex = 0;
         uint256 newIndex = 0;
 
@@ -173,8 +173,8 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
         uint256 maxReputation = 1;
 
         //// find max stake & reputation
-        for (uint256 i = 0; i < allJurorAddresses.length; i++) {
-            address currentJurorAddress = allJurorAddresses[i];
+        for (uint256 i = 0; i < activeJurorAddresses.length; i++) {
+            address currentJurorAddress = activeJurorAddresses[i];
             Juror memory juror = jurors[currentJurorAddress];
 
             // Make sure that we can only select a juror that is currently inactive and their stake amount is greater than the minimum stake amount
@@ -185,8 +185,8 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
         }
 
         // compute selection scores and assign to pools
-        for (uint256 i = 0; i < allJurorAddresses.length; i++) {
-            address currentJurorAddress = allJurorAddresses[i];
+        for (uint256 i = 0; i < activeJurorAddresses.length; i++) {
+            address currentJurorAddress = activeJurorAddresses[i];
             Juror memory juror = jurors[currentJurorAddress];
 
             if (isJurorActive[juror.jurorAddress] && juror.stakeAmount >= minStakeAmount) {

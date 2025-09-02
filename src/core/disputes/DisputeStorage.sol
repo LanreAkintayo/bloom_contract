@@ -96,6 +96,7 @@ abstract contract DisputeStorage {
     mapping(uint256 dealId => mapping(address => Evidence[])) public dealEvidences;
 
     // Jurors
+    mapping(address jurorAddress => uint256) public ongoingSelection; // This is only for when you are selected. It will be decremented as soon as 
     mapping(address jurorAddress => Juror) public jurors;
     address[] public allJurorAddresses;
     mapping(address jurorAddress => bool) public isJurorActive;
@@ -115,6 +116,7 @@ abstract contract DisputeStorage {
     mapping(uint256 disputeId => Timer) public disputeTimer;
     mapping(uint256 disputeId => mapping(address jurorAddress => Vote)) public disputeVotes;
     mapping(uint256 disputeId => Vote[]) public allDisputeVotes;
+    mapping(uint256 disputeId => uint256[] appeals) public disputeAppeals;
 
     // Staking rules
     uint256 public minStakeAmount = 1000e18;
