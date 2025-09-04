@@ -34,6 +34,7 @@ contract BloomEscrow is ReentrancyGuard, EscrowTokens {
     event DealCreated(
         uint256 indexed dealId, address indexed sender, address indexed receiver, uint256 amount, address tokenAddress
     );
+    event FundsReleased(address winner, uint256 id);
 
     //////////////////////////
     // STATE VARIABLES
@@ -205,6 +206,33 @@ contract BloomEscrow is ReentrancyGuard, EscrowTokens {
                 revert BloomEscrow__TransferFailed();
             }
         }
+    }
+
+    function releaseFunds(address winner, uint256 id) external  {
+        if (msg.sender != disputeManagerAddress){
+            revert BloomEscrow__Restricted();
+        }
+
+        // Change the deal status to resolved;
+        TypesLib.Deal storage deal = deals[id];
+        deal.status = TypesLib.Status.Resolved;
+
+        // Send funds to the winner;
+        address tokenAddress = deal.tokenAddress;
+        uint256 amount = deal.amount;
+        if (tokenAddress != address(0)) {
+            IERC20 token = IERC20(tokenAddress);
+            token.safeTransfer(winner, amount);   
+        } else {
+            (bool native_success,) = winner.call{value: amount}("");
+            if (!native_success) {
+                revert BloomEscrow__TransferFailed();
+            }
+        }
+
+        // Emit event;
+        emit FundsReleased(winner, id);
+
     }
 
     function updateStatus(uint256 id, TypesLib.Status newStatus) external {
