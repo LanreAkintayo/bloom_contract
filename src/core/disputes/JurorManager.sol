@@ -322,9 +322,11 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
             address selectedAddress = selected[i];
 
             ongoingDisputeCount[selectedAddress] += 1;
+
+            bool isPresent = isInActiveJurorAddresses(selectedAddress);
             if (
                 ongoingDisputeCount[selectedAddress] > ongoingDisputeThreshold
-                    && activeJurorAddresses[jurorAddressIndex[selectedAddress]] != address(0)
+                    && isPresent
             ) {
                 _popFromActiveJurorAddresses(selectedAddress);
             }
@@ -492,16 +494,21 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
             juror.reputation = newReputation > 0 ? uint256(newReputation) : 0;
 
             ongoingDisputeCount[currentAddress] -= 1;
+            bool isPresent = isInActiveJurorAddresses(currentAddress); 
 
             if (
                 //@complete - This will not work because jurrorIndex[currentAddress] will return 0 and there is something at index 0. 
                 ongoingDisputeCount[currentAddress] <= ongoingDisputeThreshold
-                    && activeJurorAddresses[jurorAddressIndex[currentAddress]] == address(0)
+                    && !isPresent
             ) {
                 // Push back to the array of activeJurorAddresses
                 _pushToActiveJurorAddresses(currentAddress);
             }
         }
+    }
+
+    function isInActiveJurorAddresses(address _jurorAddress) internal returns(bool){
+        return activeJurorAddresses[jurorAddressIndex[_jurorAddress]] == _jurorAddress;
     }
 
     function _determineWinner(uint256 _disputeId, Vote[] memory allVotes)
@@ -610,6 +617,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
             address jurorAddress = selectedJurorAddresses[i];
             Juror memory juror = jurors[jurorAddress];
 
+            
             if (jurorAddress == owner()) {
                 isDisputeCandidate[_disputeId][jurorAddress] = Candidate({
                     disputeId: _disputeId,
@@ -633,11 +641,12 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
             disputeJurors[_disputeId].push(jurorAddress);
             _popFromActiveJurorAddresses(jurorAddress);
             ongoingDisputeCount[jurorAddress] += 1;
-
+            
             // If there are 3+ ongoing disputes, remove from active jurors
+            bool isPresent = isInActiveJurorAddresses(jurorAddress);
             if (
                 ongoingDisputeCount[jurorAddress] > ongoingDisputeThreshold
-                    && activeJurorAddresses[jurorAddressIndex[jurorAddress]] != address(0)
+                    && isPresent
             ) {
                 _popFromActiveJurorAddresses(jurorAddress);
             }
