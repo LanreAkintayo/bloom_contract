@@ -17,8 +17,10 @@ interface IBloomEscrow {
     function cancelDeal(uint256 id) external;
 
     function reverseDeal(uint256 id) external;
-    
+
     function updateStatus(uint256 id, TypesLib.Status newStatus) external;
 
     function getDeal(uint256 id) external view returns (TypesLib.Deal memory);
+
+    function releaseFunds(address winner, uint256 id) external;
 }

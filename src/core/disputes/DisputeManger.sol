@@ -349,8 +349,7 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
         uint256 latestId = allDisputeAppeals.length > 0 ? _disputeId : allDisputeAppeals[allDisputeAppeals.length - 1];
         Dispute memory latestDispute = disputes[latestId];
         uint256 dealId = latestDispute.dealId;
-        TypesLib.Deal memory deal = bloomEscrow.getDeal(dealId);
-
+       
         Timer memory latestDisputeTimer = disputeTimer[latestId];
         uint256 endTime = latestDisputeTimer.startTime + latestDisputeTimer.standardVotingDuration + latestDisputeTimer.extendDuration;
 
@@ -364,7 +363,7 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
         }
 
         // Relase the funds to the winner
-        deal.releaseFunds(latestDispute.winner);
+        bloomEscrow.releaseFunds(latestDispute.winner, dealId);
         emit FundsReleasedToWinner(_disputeId, msg.sender);
     }
 
