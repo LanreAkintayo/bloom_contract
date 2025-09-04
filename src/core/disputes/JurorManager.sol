@@ -41,6 +41,8 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
     error JurorManager__NotInVotingPeriod();
     error JurorManager__VotingPeriodExpired();
     error JurorManager__NotInStandardVotingPeriod();
+    error JurorManager__MaxAppealExceeded();
+    error JurorManager__AlreadyWinner();
 
     /*//////////////////////////////////////////////////////////////
                                 EVENTS
@@ -56,6 +58,13 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
     event AdminParticipatedInDispute(uint256 indexed _disputeId);
     event JurorAdded(uint256 indexed _disputeId, address[] indexed newJurors);
     event StandardVotingDurationExtended(uint256 indexed _disputeId, uint256 indexed _extendDuration);
+    event DisputeFinished(
+        uint256 indexed _disputeId,
+        address indexed winner,
+        address indexed loser,
+        uint256 winnerCount,
+        uint256 loserCount
+    );
 
     /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
@@ -178,7 +187,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
             Juror memory juror = jurors[currentJurorAddress];
 
             // Make sure that we can only select a juror that is currently inactive and their stake amount is greater than the minimum stake amount
-            if (isJurorActive[juror.jurorAddress] && juror.stakeAmount >= minStakeAmount) {
+            if (juror.stakeAmount >= minStakeAmount) {
                 if (juror.stakeAmount > maxStake) maxStake = juror.stakeAmount;
                 if (juror.reputation > maxReputation) maxReputation = juror.reputation;
             }
@@ -189,7 +198,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
             address currentJurorAddress = activeJurorAddresses[i];
             Juror memory juror = jurors[currentJurorAddress];
 
-            if (isJurorActive[juror.jurorAddress] && juror.stakeAmount >= minStakeAmount) {
+            if (juror.stakeAmount >= minStakeAmount) {
                 uint256 score =
                     computeScore(juror.stakeAmount, juror.reputation, maxStake, maxReputation, alphaFP, betaFP);
 
@@ -324,10 +333,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
             ongoingDisputeCount[selectedAddress] += 1;
 
             bool isPresent = isInActiveJurorAddresses(selectedAddress);
-            if (
-                ongoingDisputeCount[selectedAddress] > ongoingDisputeThreshold
-                    && isPresent
-            ) {
+            if (ongoingDisputeCount[selectedAddress] > ongoingDisputeThreshold && isPresent) {
                 _popFromActiveJurorAddresses(selectedAddress);
             }
         }
@@ -386,28 +392,32 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
 
     function finishDispute(uint256 _disputeId) external onlyOwner {
         // Check if voting time has elapsed;
-        Timer memory disputeTimer = disputeTimer[_disputeId];
+        Timer memory appealDisputeTimer = disputeTimer[_disputeId];
 
         if (
-            block.timestamp < disputeTimer.startTime + disputeTimer.standardVotingDuration + disputeTimer.extendDuration
+            block.timestamp
+                < appealDisputeTimer.startTime + appealDisputeTimer.standardVotingDuration
+                    + appealDisputeTimer.extendDuration
         ) {
             revert JurorManager__NotFinished();
         }
         Vote[] memory allVotes = allDisputeVotes[_disputeId];
 
         // Determine the winner;
-        (bool tie, address winner,, uint256 winnerCount,) = _determineWinner(_disputeId, allVotes);
+        (bool tie, address winner, address loser, uint256 winnerCount, uint256 loserCount) =
+            _determineWinner(_disputeId, allVotes);
 
         // Update the reward and reputation accordingly
         _distributeRewardAndReputation(tie, _disputeId, winner, winnerCount);
 
         // Update all the states
-        // VOters should be marked as active. All of them
+        disputes[_disputeId].winner = winner;
 
         // Emit events;
+        emit DisputeFinished(_disputeId, winner, loser, winnerCount, loserCount);
     }
 
-    // function penalizeJuror(uint256 )
+   
 
     function _distributeRewardAndReputation(bool tie, uint256 _disputeId, address winner, uint256 winnerCount)
         internal
@@ -494,12 +504,11 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
             juror.reputation = newReputation > 0 ? uint256(newReputation) : 0;
 
             ongoingDisputeCount[currentAddress] -= 1;
-            bool isPresent = isInActiveJurorAddresses(currentAddress); 
+            bool isPresent = isInActiveJurorAddresses(currentAddress);
 
             if (
-                //@complete - This will not work because jurrorIndex[currentAddress] will return 0 and there is something at index 0. 
-                ongoingDisputeCount[currentAddress] <= ongoingDisputeThreshold
-                    && !isPresent
+                //@complete - This will not work because jurrorIndex[currentAddress] will return 0 and there is something at index 0.
+                ongoingDisputeCount[currentAddress] <= ongoingDisputeThreshold && !isPresent
             ) {
                 // Push back to the array of activeJurorAddresses
                 _pushToActiveJurorAddresses(currentAddress);
@@ -507,7 +516,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
         }
     }
 
-    function isInActiveJurorAddresses(address _jurorAddress) internal returns(bool){
+    function isInActiveJurorAddresses(address _jurorAddress) internal view returns (bool) {
         return activeJurorAddresses[jurorAddressIndex[_jurorAddress]] == _jurorAddress;
     }
 
@@ -617,7 +626,6 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
             address jurorAddress = selectedJurorAddresses[i];
             Juror memory juror = jurors[jurorAddress];
 
-            
             if (jurorAddress == owner()) {
                 isDisputeCandidate[_disputeId][jurorAddress] = Candidate({
                     disputeId: _disputeId,
@@ -641,13 +649,10 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, DisputeManage
             disputeJurors[_disputeId].push(jurorAddress);
             _popFromActiveJurorAddresses(jurorAddress);
             ongoingDisputeCount[jurorAddress] += 1;
-            
+
             // If there are 3+ ongoing disputes, remove from active jurors
             bool isPresent = isInActiveJurorAddresses(jurorAddress);
-            if (
-                ongoingDisputeCount[jurorAddress] > ongoingDisputeThreshold
-                    && isPresent
-            ) {
+            if (ongoingDisputeCount[jurorAddress] > ongoingDisputeThreshold && isPresent) {
                 _popFromActiveJurorAddresses(jurorAddress);
             }
         }

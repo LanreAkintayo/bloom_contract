@@ -25,6 +25,9 @@ abstract contract DisputeManager is DisputeStorage {
     error DisputeManager__Restricted();
     error DisputeManager__NotDisputed();
     error DisputeManager__TransferFailed();
+    error DisputeManager__NotFinished();
+    error DisputeManager__MaxAppealExceeded();
+    error DisputeManager__AlreadyWinner();
 
     //////////////////////////
     // EVENTS
@@ -88,6 +91,7 @@ abstract contract DisputeManager is DisputeStorage {
         }
 
         // Transfer dispute fee to the contract;
+        // Dispute fee is the same as the token used to create deal.
         if (deal.tokenAddress != address(0)) {
             IERC20 token = IERC20(deal.tokenAddress);
             token.safeTransferFrom(msg.sender, address(this), disputeFee);
@@ -104,6 +108,59 @@ abstract contract DisputeManager is DisputeStorage {
 
         emit DisputeOpened(dealId, msg.sender);
     }
+
+     function appeal(uint256 _disputeId) external {
+        Dispute memory disputeToAppeal = disputes[_disputeId];
+        uint256 dealId = disputeToAppeal.dealId;
+        TypesLib.Deal memory deal = bloomEscrow.getDeal(dealId);
+
+        // Increment appeal count by 1;
+        appealCounts[_disputeId] += 1;
+
+        // You have to ensure that the dispute has ended;
+        Timer memory appealDisputeTimer = disputeTimer[_disputeId];
+        if (
+            block.timestamp
+                < appealDisputeTimer.startTime + appealDisputeTimer.standardVotingDuration
+                    + appealDisputeTimer.extendDuration
+        ) {
+            revert DisputeManager__NotFinished();
+        }
+
+        // Make sure that this dispute has not gotten to the maximum appeal allowed
+        if (appealCounts[_disputeId] >= appealThreshold) {
+            revert DisputeManager__MaxAppealExceeded();
+        }
+
+        // You have to ensure that you are not the winner of the dispute;
+        if (disputeToAppeal.winner == msg.sender) {
+            revert DisputeManager__AlreadyWinner();
+        }
+
+        // You have to ensure that you have paid for the appeal; Appeal fee will be in stables;
+        uint256 appealFee = feeController.calculateAppealFee(deal.tokenAddress, deal.amount, appealCounts[_disputeId]);
+
+        // Transfer dispute fee to the contract;
+        // Dispute fee is the same as the token used to create deal.
+        if (deal.tokenAddress != address(0)) {
+            IERC20 token = IERC20(deal.tokenAddress);
+            token.safeTransferFrom(msg.sender, address(this), appealFee);
+        } else {
+            (bool native_success,) = msg.sender.call{value: appealFee}("");
+            if (!native_success) {
+                revert DisputeManager__TransferFailed();
+            }
+        }
+
+        disputeId++;
+        disputeAppeals[_disputeId].push(disputeId);
+
+
+        // Link the dispute Id to the appeal
+
+        // Emit an event
+    }
+
 
     /// @notice Adds evidence to a dispute
     /// @param dealId The ID of the deal

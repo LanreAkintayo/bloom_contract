@@ -11,4 +11,5 @@ interface IFeeController {
     function calculateEscrowFee(uint256 amount) external view returns (uint256);
     function calculateDisputeFee(uint256 amount) external view returns (uint256);
     function calculateJurorShare(uint256 amount) external view returns (uint256);
+    function calculateAppealFee(address tokenAddress, uint256 amount, uint256 round) external view returns(uint256);
 }

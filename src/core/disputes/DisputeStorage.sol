@@ -106,24 +106,32 @@ abstract contract DisputeStorage {
     mapping(address jurorAddrres => uint256 index) public jurorAddressIndex;
 
     // Candidates and voting
+    uint256 public appealThreshold = 3;
     uint256 public missedVoteThreshold = 3;
     uint256 public ongoingDisputeThreshold = 3;
     uint256 public lambda = 0.2e18;  // Smoothing factor between 0 and 1 scaled by 1e18
     uint256 public k = 5;  // Step size 
     uint256 public noVoteK = 8; // Step size for not failing to vote
     uint256 public votingPeriod = 48 hours;
-    mapping(uint256 disputeId => address[]) public disputeJurors;
+    mapping(uint256 disputeId => address[] jurorAddresses) public disputeJurors;
     mapping(uint256 disputeId => mapping(address jurorAddress => Candidate)) public isDisputeCandidate;
     mapping(uint256 disputeId => Timer) public disputeTimer;
     mapping(uint256 disputeId => mapping(address jurorAddress => Vote)) public disputeVotes;
     mapping(uint256 disputeId => Vote[]) public allDisputeVotes;
+    
+    
+    // Appeals
+    
     mapping(uint256 disputeId => uint256[] appeals) public disputeAppeals;
+    mapping(uint256 disputeId => uint256) public appealCounts;
+
 
     // Staking rules
     uint256 public minStakeAmount = 1000e18;
     uint256 public maxStakeAmount = 1_000_000_000e18;
     uint256 public slashPercentage = 1000; // 10% by default
     uint256 public noVoteSlashPercentage = 2000; // 20% by default
+    uint256 public maxSlashPercentage = 5000; // 50% at most.
 
     // Chainlink VRF
     uint32 public callbackGasLimit = 500000;
