@@ -204,7 +204,7 @@ contract BloomEscrowTest is Test {
         // // You should not be able to cancel a deal that has already been acknowledge.
         // Cancel the deal
         vm.startPrank(sender);
-        vm.expectRevert(abi.encodeWithSelector(BloomEscrow.BloomEscrow__NotSender.selector));
+        vm.expectRevert(abi.encodeWithSelector(BloomEscrow.BloomEscrow__NotPending.selector));
         bloomEscrow.cancelDeal(0);
         vm.stopPrank();
     }
