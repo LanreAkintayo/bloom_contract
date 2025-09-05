@@ -13,7 +13,7 @@ contract FeeController is Ownable {
 
     uint256 public escrowFeePercentage;
     uint256 public disputeFeePercentage;
-    uint256 public jurorShare;
+    // uint256 public jurorShare;
     uint256 public minimumAppealFee; // in USD scaled to 10^18
 
     mapping(address => address) public dataFeedAddresses;
@@ -37,13 +37,13 @@ contract FeeController is Ownable {
     constructor(
         uint256 _escrowFeePercentage,
         uint256 _disputeFeePercentage,
-        uint256 _minimumAppealFeePercentage,
-        uint256 _jurorShare
+        uint256 _minimumAppealFee
+        // uint256 _jurorShare
     ) Ownable(msg.sender) {
         escrowFeePercentage = _escrowFeePercentage;
         disputeFeePercentage = _disputeFeePercentage;
-        minimumAppealFee = _minimumAppealFeePercentage;
-        jurorShare = _jurorShare;
+        minimumAppealFee = _minimumAppealFee;
+        // jurorShare = _jurorShare;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -64,12 +64,12 @@ contract FeeController is Ownable {
         disputeFeePercentage = _disputeFeePercentage;
     }
 
-    function setJurorShare(uint256 _jurorShare) external onlyOwner {
-        if (_jurorShare > MAX_FEE_PERCENTAGE) {
-            revert FeePercentageController__InvalidFeePercentage();
-        }
-        jurorShare = _jurorShare;
-    }
+    // function setJurorShare(uint256 _jurorShare) external onlyOwner {
+    //     if (_jurorShare > MAX_FEE_PERCENTAGE) {
+    //         revert FeePercentageController__InvalidFeePercentage();
+    //     }
+    //     jurorShare = _jurorShare;
+    // }
 
     /*//////////////////////////////////////////////////////////////
                               CALCULATION FUNCTIONS
@@ -81,10 +81,6 @@ contract FeeController is Ownable {
 
     function calculateDisputeFee(uint256 amount) external view returns (uint256) {
         return (amount * disputeFeePercentage) / MAX_FEE_PERCENTAGE;
-    }
-
-    function calculateJurorShare(uint256 amount) external view returns (uint256) {
-        return (amount * jurorShare) / MAX_FEE_PERCENTAGE;
     }
 
     function calculateAppealFee(address tokenAddress, uint256 amount, uint256 round) external view returns (uint256) {
