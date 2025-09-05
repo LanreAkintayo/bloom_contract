@@ -98,7 +98,7 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
         // Charge dispute fee (if any) - omitted for simplicity
         uint256 disputeFee = 0;
 
-        if (feeController.disputeFee() > 0) {
+        if (feeController.disputeFeePercentage() > 0) {
             disputeFee = feeController.calculateDisputeFee(deal.amount);
         }
 

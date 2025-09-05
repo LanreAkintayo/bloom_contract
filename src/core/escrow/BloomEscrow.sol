@@ -8,8 +8,9 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {TypesLib} from "../../library/TypesLib.sol";
 import {IFeeController} from "../../interfaces/IFeeController.sol";
 import {EscrowTokens} from "./EscrowTokens.sol";
+import {console, Test} from "forge-std/Test.sol";
 
-contract BloomEscrow is ReentrancyGuard, EscrowTokens {
+contract BloomEscrow is ReentrancyGuard, EscrowTokens, Test {
     using SafeERC20 for IERC20;
 
     //////////////////////////
@@ -94,7 +95,7 @@ contract BloomEscrow is ReentrancyGuard, EscrowTokens {
             revert BloomEscrow__InvalidParameters();
         }
 
-        if (!isSupported[tokenAddress]) {
+        if (tokenAddress != address(0) && msg.value > 0 && !isSupported[tokenAddress]) {
             revert EscrowTokens__NotSupported();
         }
 
@@ -102,7 +103,7 @@ contract BloomEscrow is ReentrancyGuard, EscrowTokens {
         TypesLib.Deal memory newDeal = TypesLib.Deal({
             sender: sender,
             receiver: receiver,
-            amount: tokenAddress == address(0) ? msg.value : amount,
+            amount: amount,
             tokenAddress: tokenAddress,
             status: TypesLib.Status.Pending,
             id: dealCount
@@ -112,25 +113,26 @@ contract BloomEscrow is ReentrancyGuard, EscrowTokens {
         deals[dealCount] = newDeal;
         dealCount++;
 
-        uint256 totalAmount = tokenAddress == address(0) ? msg.value : amount;
+        uint256 totalAmount = amount;
 
         // Charge escrow fee (if any) - omitted for simplicity
         IFeeController feeController = IFeeController(feeControllerAddress);
 
-        if (feeController.escrowFee() > 0) {
+        if (feeController.escrowFeePercentage() > 0) {
             uint256 escrowFee = feeController.calculateEscrowFee(amount);
             totalAmount += escrowFee;
+        }
+
+        console.log("msg.value: ", msg.value);
+        console.log("total amount: ", totalAmount);
+        if (msg.value > 0 && msg.value < totalAmount) {
+            revert BloomEscrow__TransferFailed();
         }
 
         // Transfer the funds to escrow
         if (tokenAddress != address(0)) {
             IERC20 token = IERC20(tokenAddress);
             token.safeTransferFrom(sender, address(this), totalAmount);
-        } else {
-            (bool native_success,) = msg.sender.call{value: totalAmount}("");
-            if (!native_success) {
-                revert BloomEscrow__TransferFailed();
-            }
         }
 
         emit DealCreated(dealCount, sender, receiver, totalAmount, tokenAddress);
@@ -199,7 +201,7 @@ contract BloomEscrow is ReentrancyGuard, EscrowTokens {
 
         if (tokenAddress != address(0)) {
             IERC20 token = IERC20(tokenAddress);
-            token.safeTransfer(receiver, amount);   
+            token.safeTransfer(receiver, amount);
         } else {
             (bool native_success,) = receiver.call{value: amount}("");
             if (!native_success) {
@@ -208,8 +210,8 @@ contract BloomEscrow is ReentrancyGuard, EscrowTokens {
         }
     }
 
-    function releaseFunds(address winner, uint256 id) external  {
-        if (msg.sender != disputeManagerAddress){
+    function releaseFunds(address winner, uint256 id) external {
+        if (msg.sender != disputeManagerAddress) {
             revert BloomEscrow__Restricted();
         }
 
@@ -222,7 +224,7 @@ contract BloomEscrow is ReentrancyGuard, EscrowTokens {
         uint256 amount = deal.amount;
         if (tokenAddress != address(0)) {
             IERC20 token = IERC20(tokenAddress);
-            token.safeTransfer(winner, amount);   
+            token.safeTransfer(winner, amount);
         } else {
             (bool native_success,) = winner.call{value: amount}("");
             if (!native_success) {
@@ -232,7 +234,6 @@ contract BloomEscrow is ReentrancyGuard, EscrowTokens {
 
         // Emit event;
         emit FundsReleased(winner, id);
-
     }
 
     function updateStatus(uint256 id, TypesLib.Status newStatus) external {

@@ -4,7 +4,7 @@ pragma solidity 0.8.20;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
-abstract contract EscrowTokens is Ownable(msg.sender) {
+abstract contract EscrowTokens is Ownable{
     /*//////////////////////////////////////////////////////////////
                                 ERRORS
     //////////////////////////////////////////////////////////////*/
@@ -24,6 +24,8 @@ abstract contract EscrowTokens is Ownable(msg.sender) {
     //////////////////////////////////////////////////////////////*/
     event TokenAdded(address indexed tokenAddress);
     event TokenRemoved(address indexed tokenAddress);
+
+    constructor() Ownable(msg.sender) {}
 
     /*//////////////////////////////////////////////////////////////
                         EXTERNAL FUNCTIONS

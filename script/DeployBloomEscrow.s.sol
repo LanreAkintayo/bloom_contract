@@ -7,8 +7,8 @@ import {HelperConfig} from "./HelperConfig.s.sol";
 
 contract DeployBloomEscrow is Script {
 
-    function run() external {
-        deployBloomEscrow();
+    function run() external returns(BloomEscrow, HelperConfig) {
+        return deployBloomEscrow();
     }
 
     function deployBloomEscrow() internal returns (BloomEscrow, HelperConfig) {
