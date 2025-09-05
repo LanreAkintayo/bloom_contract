@@ -39,23 +39,32 @@ contract FeeControllerTest is Test {
 
     }
 
-    function testCalculateAppealFee() external {
-        address tokenAddress = address(0);
+    function testCalculateAppealFee() external view {
         uint256 round = 1;
-        uint256 minimumAppealFee = feeController.minimumAppealFee();
-        uint256 disputeFeePercentage = feeController.disputeFeePercentage();
+        uint256 minimumAppealFee = feeController.minimumAppealFee();         // 10e18 = 10 in USDC scaled to e18
+        uint256 disputeFeePercentage = feeController.disputeFeePercentage(); // 500 = 5%
         uint256 maximumPercentage = feeController.MAX_FEE_PERCENTAGE();
         
         // If I charge in USDC, the appeal fee should be calculated accurately in USDC
         address usdcTokenAddress = networkConfig.usdcTokenAddress;
         uint256 amountInUsdc = 100e8;
-        // uint256 expectedAppealFee = amountInUsdc * disputeFeePercentage * 2 ** (round - 1) / maximumPercentage;
-        uint256 actualAppealFee = feeController.calculateAppealFee(usdcTokenAddress, round, amountInUsdc);
-        assertEq(minimumAppealFee, actualAppealFee); 
+        uint256 actualAppealFee = feeController.calculateAppealFee(usdcTokenAddress, amountInUsdc, round);
+        assertEq(10e8, actualAppealFee); 
 
-        // If I charge in ETH, the appeal fee should be calculated accurately in ETH
         // If I charge in DAI, the appeal fee should be calculated accurately in DAI
-
+        address daiTokenAddress = networkConfig.daiTokenAddress;
+        uint256 amountInDai = 100e18;
+        uint256 actualAppealFeeInDai = feeController.calculateAppealFee(daiTokenAddress, amountInDai, round);
+        assertEq(10e18, actualAppealFeeInDai); 
+        
+        
+        // If I charge in ETH, the appeal fee should be calculated accurately in ETH
+         address wethTokenAddress = networkConfig.wethTokenAddress;
+        uint256 amountInWeth = 1000e18;
+        uint256 actualAppealFeeInWeth = feeController.calculateAppealFee(wethTokenAddress, amountInWeth, round);
+        uint256 expectedAppealFeeInWeth = amountInWeth * disputeFeePercentage * 2 ** (round - 1) / maximumPercentage;
+        assertEq(expectedAppealFeeInWeth, 50e18);
+        assertEq(expectedAppealFeeInWeth, actualAppealFeeInWeth); 
     }
 }
 

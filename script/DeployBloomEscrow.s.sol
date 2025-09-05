@@ -1,22 +1,25 @@
 //SPDX-License-Identifier: MIT
 pragma solidity 0.8.20;
 
-
 import {Script} from "forge-std/Script.sol";
 import {BloomEscrow} from "../src/core/escrow/BloomEscrow.sol";
-
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {HelperConfig} from "./HelperConfig.s.sol";
 
 contract DeployBloomEscrow is Script {
-    BloomEscrow public bloomEscrow;
 
     function run() external {
-        deployContract();
+        deployBloomEscrow();
     }
 
+    function deployBloomEscrow() internal returns (BloomEscrow, HelperConfig) {
+        
+        HelperConfig helperConfig = new HelperConfig();
 
-    function deployContract() internal returns (BloomEscrow){
-        // Implementation will sit here
+        // Deploy the contracts;
+        vm.startBroadcast();
+        BloomEscrow bloomEscrow = new BloomEscrow();
+        vm.stopBroadcast();
+
+        return (bloomEscrow, helperConfig);
     }
-
 }

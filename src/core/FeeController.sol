@@ -3,6 +3,7 @@ pragma solidity 0.8.20;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
+import {Test, console} from "forge-std/Test.sol";
 
 /// @title FeePercentageController
 /// @notice Centralized fee management for Bloom (escrow, dispute, and juror shares)
@@ -34,12 +35,10 @@ contract FeeController is Ownable {
                                 CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
 
-    constructor(
-        uint256 _escrowFeePercentage,
-        uint256 _disputeFeePercentage,
-        uint256 _minimumAppealFee
+    constructor(uint256 _escrowFeePercentage, uint256 _disputeFeePercentage, uint256 _minimumAppealFee)
         // uint256 _jurorShare
-    ) Ownable(msg.sender) {
+        Ownable(msg.sender)
+    {
         escrowFeePercentage = _escrowFeePercentage;
         disputeFeePercentage = _disputeFeePercentage;
         minimumAppealFee = _minimumAppealFee;
@@ -88,17 +87,20 @@ contract FeeController is Ownable {
 
         uint8 tokenDecimals = dataFeed.decimals();
 
-        (, int256 answer,,,) = dataFeed.latestRoundData();
+        (, int256 answer,,,) = dataFeed.latestRoundData(); // Price in UD
 
-        uint256 priceInWei = uint256(answer) * 10 ** (18 - tokenDecimals);
-        uint256 minimumAppealFeeInTokenScale = (minimumAppealFee * 10**tokenDecimals) / priceInWei;
+        uint256 minimumAppealFeeInTokenScale = (minimumAppealFee * 10 ** tokenDecimals) / 10 ** 18;
 
-        uint256 potentialAppealFee = (amount * disputeFeePercentage * 2 ** (round - 1)) / MAX_FEE_PERCENTAGE;
+        uint256 priceInWeiUsd = uint256(answer) * 10 ** (18 - tokenDecimals);
+
+        uint256 potentialAppealFee = (amount * disputeFeePercentage * (2 ** (round - 1))) / MAX_FEE_PERCENTAGE;
+        uint256 potentialAppealFeeInWeiUsd = (potentialAppealFee * 10 ** (18 - tokenDecimals)) * priceInWeiUsd / 10 ** 18;
 
         uint256 appealFee =
-            potentialAppealFee > minimumAppealFeeInTokenScale ? potentialAppealFee : minimumAppealFeeInTokenScale;
+            potentialAppealFeeInWeiUsd > minimumAppealFee ? potentialAppealFee : minimumAppealFeeInTokenScale;
         return appealFee;
     }
+    
 
     function addToDataFeed(address tokenAddress, address dataFeed) external onlyOwner {
         dataFeedAddresses[tokenAddress] = dataFeed;
