@@ -91,7 +91,7 @@ contract FeeController is Ownable {
         (, int256 answer,,,) = dataFeed.latestRoundData();
 
         uint256 priceInWei = uint256(answer) * 10 ** (18 - tokenDecimals);
-        uint256 minimumAppealFeeInTokenScale = (minimumAppealFee * tokenDecimals) / priceInWei;
+        uint256 minimumAppealFeeInTokenScale = (minimumAppealFee * 10**tokenDecimals) / priceInWei;
 
         uint256 potentialAppealFee = (amount * disputeFeePercentage * 2 ** (round - 1)) / MAX_FEE_PERCENTAGE;
 

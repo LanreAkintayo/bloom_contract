@@ -10,7 +10,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 contract DeployFeeController is Script {
 
     uint256 public escrowFeePercentage = 100;  // 1% fee
-    uint256 public disputeFeePercentage =500;  // 5%
+    uint256 public disputeFeePercentage = 500;  // 5%
     uint256 public minimumAppealFee = 10e18; // in USD scaled to 10^18
     // uint256 public jurorShare;
 

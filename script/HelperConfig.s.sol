@@ -3,6 +3,9 @@ pragma solidity ^0.8.19;
 
 import {MockV3Aggregator} from "../test/mocks/MockV3Aggregator.sol";
 import {Script, console2} from "forge-std/Script.sol";
+import {MockUSDC} from "../test/mocks/MockUSDC.sol";
+import {MockDAI} from "../test/mocks/MockDAI.sol";
+import {MockWETH} from "../test/mocks/MockWETH.sol";
 
 abstract contract CodeConstants {
     // For ETH
@@ -38,6 +41,9 @@ contract HelperConfig is CodeConstants, Script {
         address ethUsdPriceFeed; // ETH/USD price feed address
         address usdcUsdPriceFeed; // USDC/USD price feed address
         address daiUsdPriceFeed; // DAI/USD price feed address
+        address usdcTokenAddress;
+        address daiTokenAddress;
+        address wethTokenAddress;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -77,14 +83,23 @@ contract HelperConfig is CodeConstants, Script {
         NetworkConfig memory sepoliaConfig = NetworkConfig({
             ethUsdPriceFeed: 0x694AA1769357215DE4FAC081bf1f309aDC325306,
             usdcUsdPriceFeed: address(0),
-            daiUsdPriceFeed: address(0)
+            daiUsdPriceFeed: address(0),
+            usdcTokenAddress: 0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174,
+            daiTokenAddress: 0x6B175474E89094C44Da98b954EedeAC495271d0F,
+            wethTokenAddress: 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
         });
         return sepoliaConfig;
     }
 
     function getZkSyncSepoliaConfig() public pure returns (NetworkConfig memory) {
-        NetworkConfig memory zkSyncSepoliaConfig =
-            NetworkConfig({ethUsdPriceFeed: address(0), usdcUsdPriceFeed: address(0), daiUsdPriceFeed: address(0)});
+        NetworkConfig memory zkSyncSepoliaConfig = NetworkConfig({
+            ethUsdPriceFeed: address(0),
+            usdcUsdPriceFeed: address(0),
+            daiUsdPriceFeed: address(0),
+            usdcTokenAddress: address(0),
+            daiTokenAddress: address(0),
+            wethTokenAddress: address(0)
+        });
         return zkSyncSepoliaConfig;
     }
 
@@ -105,13 +120,27 @@ contract HelperConfig is CodeConstants, Script {
         mockEthPriceFeed = new MockV3Aggregator(ETH_DECIMALS, ETH_INITIAL_PRICE);
         mockDaiPriceFeed = new MockV3Aggregator(DAI_DECIMALS, DAI_INITIAL_PRICE);
 
+        MockUSDC mockUsdc = new MockUSDC();
+        MockDAI mockDai = new MockDAI();
+        MockWETH mockWeth = new MockWETH();
+
         vm.stopBroadcast();
 
         localNetworkConfig = NetworkConfig({
             ethUsdPriceFeed: address(mockEthPriceFeed),
             usdcUsdPriceFeed: address(mockUsdcPriceFeed),
-            daiUsdPriceFeed: address(mockDaiPriceFeed)
+            daiUsdPriceFeed: address(mockDaiPriceFeed),
+            usdcTokenAddress: address(mockUsdc),
+            daiTokenAddress: address(mockDai),
+            wethTokenAddress: address(mockWeth)
         });
         return localNetworkConfig;
     }
+
+    // function getDeployer() external pure returns (address deployerAddress, uint256 privateKey) {
+    //     // uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+    //     address deployer = vm.addr(deployerPrivateKey);
+
+    //     return (deployer, deployerPrivateKey);
+    // }
 }
