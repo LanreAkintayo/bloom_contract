@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.20;
+pragma solidity ^0.8.20;
 
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -90,6 +90,7 @@ abstract contract DisputeStorage {
     // Disputes and evidences
     uint256 public disputeId;
     uint256 public constant MAX_PERCENT  = 10_000; // This represents 100%
+    mapping(uint256 dealId => uint256 disputeId) public dealToDispute;
     mapping(uint256 disputeId => Dispute) public disputes;
 
     // address can either be the sender or the proposed receiver

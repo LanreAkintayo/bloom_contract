@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.20;
+pragma solidity ^0.8.20;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
-import {Test, console} from "forge-std/Test.sol";
+import { console} from "forge-std/Test.sol";
 
 /// @title FeePercentageController
 /// @notice Centralized fee management for Bloom (escrow, dispute, and juror shares)

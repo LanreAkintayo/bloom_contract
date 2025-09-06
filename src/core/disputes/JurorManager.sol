@@ -1,13 +1,10 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity 0.8.20;
+pragma solidity ^0.8.20;
 
-import {TypesLib} from "../../library/TypesLib.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {ConfirmedOwner} from "@chainlink/contracts/src/v0.8/shared/access/ConfirmedOwner.sol";
 import {VRFV2WrapperConsumerBase} from "@chainlink/contracts/src/v0.8/vrf/VRFV2WrapperConsumerBase.sol";
-import {LinkTokenInterface} from "@chainlink/contracts/src/v0.8/shared/interfaces/LinkTokenInterface.sol";
+
 import {DisputeManager} from "./DisputeManger.sol";
 
 contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
@@ -58,7 +55,6 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
     event AdminParticipatedInDispute(uint256 indexed _disputeId);
     event JurorAdded(uint256 indexed _disputeId, address[] indexed newJurors);
     event StandardVotingDurationExtended(uint256 indexed _disputeId, uint256 indexed _extendDuration);
-   
 
     /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
@@ -198,8 +194,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
 
         // compute selection scores and assign to pools
         for (uint256 i = 0; i < activeJurorAddresses.length; i++) {
-            address currentJurorAddress = activeJurorAddresses[i];
-            Juror memory juror = jurors[currentJurorAddress];
+            Juror memory juror = jurors[activeJurorAddresses[i]];
 
             if (juror.stakeAmount >= minStakeAmount) {
                 uint256 score =
@@ -599,5 +594,27 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
 
         timer.extendDuration = _extendDuration;
         emit StandardVotingDurationExtended(_disputeId, _extendDuration);
+    }
+
+    // Getters;
+
+    function getDisputeJurors(uint256 _disputeId) external view returns (address[] memory) {
+        return disputeJurors[_disputeId];
+    }
+
+    function getAllDisputeJurors() external view returns (address[] memory) {
+        return allJurorAddresses;
+    }
+
+    function getAllActiveJurors() external view returns (address[] memory) {
+        return activeJurorAddresses;
+    }
+
+    function getJuror(address _jurorAddress) external view returns (Juror memory) {
+        return jurors[_jurorAddress];
+    }
+
+    function getJurorDisputeHistory(address _jurorAddress) external view returns (uint256[] memory) {
+        return jurorDisputeHistory[_jurorAddress];
     }
 }

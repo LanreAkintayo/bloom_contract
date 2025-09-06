@@ -1,5 +1,6 @@
 //SPDX-License-Identifier: MIT
-pragma solidity 0.8.20;
+pragma solidity ^0.8.20;
+
 
 import {Script} from "forge-std/Script.sol";
 import {BloomEscrow} from "../src/core/escrow/BloomEscrow.sol";

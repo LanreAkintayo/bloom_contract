@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity 0.8.20;
+pragma solidity ^0.8.20;
 
 import {TypesLib} from "../../library/TypesLib.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -93,6 +93,7 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
         });
 
         disputes[disputeId] = dispute;
+        dealToDispute[dealId] = disputeId;
         disputeId++;
 
         // Charge dispute fee (if any) - omitted for simplicity
@@ -452,5 +453,29 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
 
     function isInActiveJurorAddresses(address _jurorAddress) internal view returns (bool) {
         return activeJurorAddresses[jurorAddressIndex[_jurorAddress]] == _jurorAddress;
+    }
+
+      function getDisputeCandidate(uint256 _disputeId, address _jurorAddress) external view returns (Candidate memory) {
+        return isDisputeCandidate[_disputeId][_jurorAddress];
+    }
+
+    function getDisputeVote(uint256 _disputeId, address _jurorAddress) external view returns (Vote memory) {
+        return disputeVotes[_disputeId][_jurorAddress];
+    }
+
+    function getDisputeVotes(uint256 _disputeId) external view returns (Vote[] memory) {
+        return allDisputeVotes[_disputeId];
+    }
+
+    function getDisputeTimer(uint256 _disputeId) external view returns (Timer memory) {
+        return disputeTimer[_disputeId];
+    }
+
+    function getDisputeAppeals(uint256 _disputeId) external view returns (uint256[] memory) {
+        return disputeAppeals[_disputeId];
+    }
+
+    function getDisputeAppealCount(uint256 _disputeId) external view returns (uint256) {
+        return appealCounts[_disputeId];
     }
 }
