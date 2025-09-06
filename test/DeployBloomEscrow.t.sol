@@ -11,7 +11,6 @@ import {FeeController} from "../src/core/FeeController.sol";
 import {DeployFeeController} from "../script/DeployFeeController.s.sol";
 import {TypesLib} from "../src/library/TypesLib.sol";
 
-
 contract BloomEscrowTest is Test {
     DeployBloomEscrow deployBloomEscrow;
     DeployFeeController deployFeeController;
@@ -20,193 +19,263 @@ contract BloomEscrowTest is Test {
     HelperConfig.NetworkConfig networkConfig;
     FeeController feeController;
 
+    address sender;
+    address receiver;
+
     function setUp() external {
+        // Deploy contracts
         deployBloomEscrow = new DeployBloomEscrow();
         (bloomEscrow, helperConfig) = deployBloomEscrow.run();
         networkConfig = helperConfig.getConfigByChainId(block.chainid);
 
-        setUpFeeController();
+        deployFeeController = new DeployFeeController();
+        (feeController, helperConfig) = deployFeeController.run();
+        networkConfig = helperConfig.getConfigByChainId(block.chainid);
 
+        // Link fee controller
         vm.startPrank(bloomEscrow.owner());
-        // Add fee controller to the bloom escrow
         bloomEscrow.addFeeController(address(feeController));
-
-        // Add supported tokens to the bloom escrow
         bloomEscrow.addToken(networkConfig.usdcTokenAddress);
         bloomEscrow.addToken(networkConfig.daiTokenAddress);
         bloomEscrow.addToken(networkConfig.wethTokenAddress);
         vm.stopPrank();
-    }
 
-    function setUpFeeController() internal {
-        deployFeeController = new DeployFeeController();
-        (feeController, helperConfig ) = deployFeeController.run();
-        networkConfig = helperConfig.getConfigByChainId(block.chainid);
-
-        // Add price feed to fee controller;
+        // Configure fee controller
         vm.startPrank(feeController.owner());
         feeController.addToDataFeed(networkConfig.usdcTokenAddress, networkConfig.usdcUsdPriceFeed);
         feeController.addToDataFeed(networkConfig.daiTokenAddress, networkConfig.daiUsdPriceFeed);
         feeController.addToDataFeed(networkConfig.wethTokenAddress, networkConfig.ethUsdPriceFeed);
         vm.stopPrank();
+
+        // Test actors
+        sender = makeAddr("sender");
+        receiver = makeAddr("receiver");
     }
 
-    function testCreateDealWithERC20() external {
-        // Create a deal and check if all states have been updated;
-        address sender = makeAddr("sender");
-        address receiver = makeAddr("receiver");
-        address tokenAddress = networkConfig.usdcTokenAddress;
-        uint256 amount = 100e8;
+    // ------------------------
+    // Helper functions
+    // ------------------------
+
+    function _createERC20Deal(address _sender, address _receiver, address tokenAddress, uint256 amount)
+        internal
+        returns (uint256 dealId)
+    {
         uint256 escrowFee = feeController.calculateEscrowFee(amount);
         uint256 totalAmount = amount + escrowFee;
 
-        // Mint some usdc to sender;
         IERC20Mock token = IERC20Mock(tokenAddress);
         vm.prank(address(helperConfig));
-        token.mint(sender, 1_000_000e18);
+        token.mint(_sender, 1_000_000e18);
 
-        vm.startPrank(sender);
-        // Approve bloom escrow to spend your token
+        vm.startPrank(_sender);
         token.approve(address(bloomEscrow), totalAmount);
-        bloomEscrow.createDeal(sender, receiver, tokenAddress, amount);
+        bloomEscrow.createDeal(_sender, _receiver, tokenAddress, amount);
         vm.stopPrank();
 
-        // Check states;
-        assertEq(bloomEscrow.dealCount(), 1);
-        TypesLib.Deal memory deal = bloomEscrow.getDeal(0);
-        assertEq(deal.sender, sender);
-        assertEq(deal.receiver, receiver);
-        assertEq(deal.tokenAddress, tokenAddress);
-        assertEq(deal.amount, amount);
-        assertEq(uint8(deal.status), uint8(TypesLib.Status.Pending));
-        assertEq(deal.id, 0);
+        return bloomEscrow.dealCount() - 1;
+    }
 
-        // Check escrow balance;
-        assertEq(token.balanceOf(address(bloomEscrow)), totalAmount);
+    function _createETHDeal(address _sender, address _receiver, uint256 amount) internal returns (uint256 dealId) {
+        uint256 escrowFee = feeController.calculateEscrowFee(amount);
+        uint256 totalAmount = amount + escrowFee;
+
+        vm.deal(_sender, 100 ether);
+
+        vm.startPrank(_sender);
+        bloomEscrow.createDeal{value: totalAmount}(_sender, _receiver, address(0), amount);
+        vm.stopPrank();
+
+        return bloomEscrow.dealCount() - 1;
+    }
+
+    function _assertDeal(
+        TypesLib.Deal memory deal,
+        address expectedSender,
+        address expectedReceiver,
+        address expectedToken,
+        uint256 expectedAmount,
+        TypesLib.Status expectedStatus
+    ) internal pure {
+        assertEq(deal.sender, expectedSender);
+        assertEq(deal.receiver, expectedReceiver);
+        assertEq(deal.tokenAddress, expectedToken);
+        assertEq(deal.amount, expectedAmount);
+        assertEq(uint8(deal.status), uint8(expectedStatus));
+    }
+
+    // ------------------------
+    // Tests
+    // ------------------------
+
+    function testCreateDealWithERC20() external {
+        uint256 amount = 100e8;
+        uint256 dealId = _createERC20Deal(sender, receiver, networkConfig.usdcTokenAddress, amount);
+
+        TypesLib.Deal memory deal = bloomEscrow.getDeal(dealId);
+        _assertDeal(deal, sender, receiver, networkConfig.usdcTokenAddress, amount, TypesLib.Status.Pending);
+
+        uint256 escrowFee = feeController.calculateEscrowFee(amount);
+        assertEq(IERC20Mock(networkConfig.usdcTokenAddress).balanceOf(address(bloomEscrow)), amount + escrowFee);
     }
 
     function testCreateDealWithETH() external {
-       // Create a deal and check if all states have been updated;
-        address sender = makeAddr("sender");
-        address receiver = makeAddr("receiver");
-        address tokenAddress = address(0);
         uint256 amount = 10e8;
+        uint256 dealId = _createETHDeal(sender, receiver, amount);
+
+        TypesLib.Deal memory deal = bloomEscrow.getDeal(dealId);
+        _assertDeal(deal, sender, receiver, address(0), amount, TypesLib.Status.Pending);
+
         uint256 escrowFee = feeController.calculateEscrowFee(amount);
-        uint256 totalAmount = amount + escrowFee;
-        console.log("Outide, the totalAmount: %s", totalAmount);
-
-        // Fund the sender with eth;
-        deal(sender, 100 ether); // now deployer has 100 ETH
-        assertEq(sender.balance, 100 ether);
-
-       
-        vm.startPrank(sender);
-        bloomEscrow.createDeal{value: totalAmount}(sender, receiver, tokenAddress, amount);
-        vm.stopPrank();
-
-        // Check states;
-        assertEq(bloomEscrow.dealCount(), 1);
-        TypesLib.Deal memory deal = bloomEscrow.getDeal(0);
-        assertEq(deal.sender, sender);
-        assertEq(deal.receiver, receiver);
-        assertEq(deal.tokenAddress, tokenAddress);
-        assertEq(deal.amount, amount);
-        assertEq(uint8(deal.status), uint8(TypesLib.Status.Pending));
-        assertEq(deal.id, 0);
-
-        // Check escrow balance;
-        assertEq(address(bloomEscrow).balance, totalAmount);
+        assertEq(address(bloomEscrow).balance, amount + escrowFee);
     }
 
     function testCancelDeal() external {
-        //  // Create a deal
-          address sender = makeAddr("sender");
-        address receiver = makeAddr("receiver");
-        address tokenAddress = networkConfig.usdcTokenAddress;
-        uint256 amount = 100e8;
-        uint256 escrowFee = feeController.calculateEscrowFee(amount);
-        uint256 totalAmount = amount + escrowFee;
+        uint256 dealId = _createERC20Deal(sender, receiver, networkConfig.usdcTokenAddress, 100e8);
+        IERC20Mock token = IERC20Mock(networkConfig.usdcTokenAddress);
 
-        // Mint some usdc to sender;
-        IERC20Mock token = IERC20Mock(tokenAddress);
-        vm.prank(address(helperConfig));
-        token.mint(sender, 1_000_000e18);
-
-        vm.startPrank(sender);
-        // Approve bloom escrow to spend your token
-        token.approve(address(bloomEscrow), totalAmount);
-        bloomEscrow.createDeal(sender, receiver, tokenAddress, amount);
-        vm.stopPrank();
-
-        // // Cancel the deal
-
-        // Determine balance before cancellation
-        uint256 balanceBeforeCancel = token.balanceOf(sender);
-        uint256 balanceBeforeCancelEscrow = token.balanceOf(address(bloomEscrow));
-
-        // Expect this to fail
+        // Receiver cannot cancel
         vm.startPrank(receiver);
         vm.expectRevert(abi.encodeWithSelector(BloomEscrow.BloomEscrow__NotSender.selector));
-        bloomEscrow.cancelDeal(0);
+        bloomEscrow.cancelDeal(dealId);
         vm.stopPrank();
 
-        // Expect this to work
+        // Sender cancels
+        uint256 balanceBefore = token.balanceOf(sender);
         vm.startPrank(sender);
-        bloomEscrow.cancelDeal(0);
+        bloomEscrow.cancelDeal(dealId);
         vm.stopPrank();
 
-
-        // Determine balance after cancellation
-        uint256 balanceAfterCancel = token.balanceOf(sender);
-        uint256 balanceAfterCancelEscrow = token.balanceOf(address(bloomEscrow));
-
-        // Check states
-        TypesLib.Deal memory deal = bloomEscrow.getDeal(0);
-        assertEq(balanceBeforeCancel + amount, balanceAfterCancel);
-        assertEq(balanceBeforeCancelEscrow - amount, balanceAfterCancelEscrow);
-        assertEq(uint8(deal.status), uint8(TypesLib.Status.Canceled));
-
+        TypesLib.Deal memory deal = bloomEscrow.getDeal(dealId);
+        assertEq(token.balanceOf(sender), balanceBefore + deal.amount);
+        _assertDeal(deal, sender, receiver, networkConfig.usdcTokenAddress, deal.amount, TypesLib.Status.Canceled);
     }
 
     function testAcknowledgeDeal() external {
-        // // Create a deal 
-        address sender = makeAddr("sender");
-        address receiver = makeAddr("receiver");
-        address tokenAddress = networkConfig.usdcTokenAddress;
-        uint256 amount = 100e8;
-        uint256 escrowFee = feeController.calculateEscrowFee(amount);
-        uint256 totalAmount = amount + escrowFee;
+        uint256 dealId = _createERC20Deal(sender, receiver, networkConfig.usdcTokenAddress, 100e8);
 
-        // Mint some usdc to sender;
-        IERC20Mock token = IERC20Mock(tokenAddress);
-        vm.prank(address(helperConfig));
-        token.mint(sender, 1_000_000e18);
-
-        vm.startPrank(sender);
-        // Approve bloom escrow to spend your token
-        token.approve(address(bloomEscrow), totalAmount);
-        bloomEscrow.createDeal(sender, receiver, tokenAddress, amount);
-        vm.stopPrank();
-
-        // //  Receiver acknowledge the deal
-        // Only the receiver should be able to acknowledge
+        // Only receiver can acknowledge
         vm.startPrank(sender);
         vm.expectRevert(abi.encodeWithSelector(BloomEscrow.BloomEscrow__NotReceiver.selector));
-        bloomEscrow.acknowledgeDeal(0);
+        bloomEscrow.acknowledgeDeal(dealId);
         vm.stopPrank();
 
-        // Now acknowledge the deal
         vm.startPrank(receiver);
-        bloomEscrow.acknowledgeDeal(0);
+        bloomEscrow.acknowledgeDeal(dealId);
         vm.stopPrank();
 
-
-        // // You should not be able to cancel a deal that has already been acknowledge.
-        // Cancel the deal
+        // Cannot cancel after acknowledgement
         vm.startPrank(sender);
         vm.expectRevert(abi.encodeWithSelector(BloomEscrow.BloomEscrow__NotPending.selector));
-        bloomEscrow.cancelDeal(0);
+        bloomEscrow.cancelDeal(dealId);
         vm.stopPrank();
     }
 
+    function testUnacknowledgeDeal() external {
+        uint256 dealId = _createERC20Deal(sender, receiver, networkConfig.usdcTokenAddress, 100e8);
+
+        // Receiver acknowledges
+        vm.startPrank(receiver);
+        bloomEscrow.acknowledgeDeal(dealId);
+        vm.stopPrank();
+
+        // Sender cannot cancel while acknowledged
+        vm.startPrank(sender);
+        vm.expectRevert(abi.encodeWithSelector(BloomEscrow.BloomEscrow__NotPending.selector));
+        bloomEscrow.cancelDeal(dealId);
+        vm.stopPrank();
+
+        // Receiver unacknowledges
+        vm.startPrank(receiver);
+        bloomEscrow.unacknowledgeDeal(dealId);
+        vm.stopPrank();
+
+        // Sender can cancel now
+        vm.startPrank(sender);
+        bloomEscrow.cancelDeal(dealId);
+        vm.stopPrank();
+    }
+
+    function testFinalizeDealWithERC20() external {
+        // The sender will finalize deal after they are done with their transactions with the receivers;
+
+        uint256 dealId = _createERC20Deal(sender, receiver, networkConfig.usdcTokenAddress, 100e8);
+
+        // Check balance of receiver before finalizing;
+        IERC20Mock token = IERC20Mock(networkConfig.usdcTokenAddress);
+        uint256 balanceBefore = token.balanceOf(receiver);
+
+        // Then finalize later even if the receiver has not acknowledge;
+        vm.startPrank(sender);
+        bloomEscrow.finalizeDeal(dealId);
+        vm.stopPrank();
+
+        // Check balance of receiver after finalizing;
+        uint256 balanceAfter = token.balanceOf(receiver);
+
+        assertEq(balanceAfter, balanceBefore + 100e8);
+
+        // After finalizing, make sure that you cannot finalize again
+        vm.startPrank(sender);
+        vm.expectRevert(abi.encodeWithSelector(BloomEscrow.BloomEscrow__AlreadyFinalized.selector));
+        bloomEscrow.finalizeDeal(dealId);
+        vm.stopPrank();
+
+    }
+
+     function testFinalizeDealAfterAcknowledgeWithERC20() external {
+        // The sender will finalize deal after they are done with their transactions with the receivers;
+
+        uint256 dealId = _createERC20Deal(sender, receiver, networkConfig.usdcTokenAddress, 100e8);
+
+        // Receiver acknowledges;
+        vm.startPrank(receiver);
+        bloomEscrow.acknowledgeDeal(dealId);
+        vm.stopPrank();
+
+        // Check balance of receiver before finalizing;
+        IERC20Mock token = IERC20Mock(networkConfig.usdcTokenAddress);
+        uint256 balanceBefore = token.balanceOf(receiver);
+
+        // Then finalize later
+        vm.startPrank(sender);
+        bloomEscrow.finalizeDeal(dealId);
+        vm.stopPrank();
+
+        // Check balance of receiver after finalizing;
+        uint256 balanceAfter = token.balanceOf(receiver);
+
+        assertEq(balanceAfter, balanceBefore + 100e8);
+
+        // After finalizing, make sure that you cannot finalize again
+        vm.startPrank(sender);
+        vm.expectRevert(abi.encodeWithSelector(BloomEscrow.BloomEscrow__AlreadyFinalized.selector));
+        bloomEscrow.finalizeDeal(dealId);
+        vm.stopPrank();
+
+    }
+
+    function testFinalizeDealWithETH() external {
+        // The sender will finalize deal after they are done with their transactions with the receivers;
+
+        uint256 dealId = _createETHDeal(sender, receiver, 100e8);
+
+        // Check balance of receiver before finalizing;
+        uint256 balanceBefore = receiver.balance;
+
+        // Then finalize later even if the receiver has not acknowledge;
+        vm.startPrank(sender);
+        bloomEscrow.finalizeDeal(dealId);
+        vm.stopPrank();
+
+        // Check balance of receiver after finalizing;
+        uint256 balanceAfter = receiver.balance;
+
+        assertEq(balanceAfter, balanceBefore + 100e8);
+
+        // After finalizing, make sure that you cannot finalize again
+        vm.startPrank(sender);
+        vm.expectRevert(abi.encodeWithSelector(BloomEscrow.BloomEscrow__AlreadyFinalized.selector));
+        bloomEscrow.finalizeDeal(dealId);
+        vm.stopPrank();
+    }
 }

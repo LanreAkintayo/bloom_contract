@@ -10,7 +10,7 @@ import {IFeeController} from "../../interfaces/IFeeController.sol";
 import {EscrowTokens} from "./EscrowTokens.sol";
 import {console, Test} from "forge-std/Test.sol";
 
-contract BloomEscrow is ReentrancyGuard, EscrowTokens, Test {
+contract BloomEscrow is ReentrancyGuard, EscrowTokens {
     using SafeERC20 for IERC20;
 
     //////////////////////////
@@ -27,6 +27,8 @@ contract BloomEscrow is ReentrancyGuard, EscrowTokens, Test {
     error BloomEscrow__Restricted();
     error BloomEscrow__CannotDispute();
     error BloomEscrow__ZeroAddress();
+    error BloomEscrow__AlreadyFinalized();
+    error BloomEscrow__CannotFinalize();
 
     //////////////////////////
     // EVENTS
@@ -189,8 +191,12 @@ contract BloomEscrow is ReentrancyGuard, EscrowTokens, Test {
     function finalizeDeal(uint256 id) external onlySender(id) {
         TypesLib.Deal storage deal = deals[id];
 
-        if (deal.status != TypesLib.Status.Pending) {
-            revert BloomEscrow__NotPending();
+        if (deal.status == TypesLib.Status.Completed) {
+            revert BloomEscrow__AlreadyFinalized();
+        }
+
+        if (deal.status != TypesLib.Status.Acknowledged && deal.status != TypesLib.Status.Pending) {
+            revert BloomEscrow__CannotFinalize();
         }
 
         deal.status = TypesLib.Status.Completed;
