@@ -49,9 +49,7 @@ contract JurorManagerTest is BaseJuror {
         return bloomEscrow.dealCount() - 1;
     }
 
-
-
-    function _openDispute(address _sender, uint256 dealId) internal returns(uint256) {
+    function _openDispute(address _sender, uint256 dealId) internal returns (uint256) {
         TypesLib.Deal memory deal = bloomEscrow.getDeal(dealId);
 
         address tokenAddress = deal.tokenAddress;
@@ -81,7 +79,7 @@ contract JurorManagerTest is BaseJuror {
         uint256 dealId = _createERC20Deal(sender, receiver, daiTokenAddress, dealAmount);
 
         // Then you should be able to open a dispute;
-       uint256 disputeId = _openDispute(sender, dealId);
+        uint256 disputeId = _openDispute(sender, dealId);
 
         // Then check the states;
         // DisputeStorage.Dispute memory dispute = jurorManager.disputes(disputeId);
@@ -98,12 +96,11 @@ contract JurorManagerTest is BaseJuror {
         uint256 stakeAmount = 2000e18;
 
         // Mint to juror 1 and then approve the contract to spend the stake amount
-        
+
         vm.prank(address(helperConfig));
         bloom.mint(juror1, stakeAmount);
 
         uint256 tokenBalanceBefore = bloom.balanceOf(juror1);
-
 
         // You can only stake with bloom token
         vm.startPrank(juror1);
@@ -131,12 +128,137 @@ contract JurorManagerTest is BaseJuror {
     function testSelectJuror() external {
         uint256 disputeId;
         uint256 thresholdFP;
-        uint256 alphaFP;
-        uint256 betaFP;
-        uint256 expNeeded;
-        uint256 newbieNeeded;
-        uint256 experiencedPoolSize;
+        uint256 alphaFP = 0.6e18; // Stake is stronger
+        uint256 betaFP = 0.4e18; // Reputation is betaFP
+        uint256 expNeeded = 2;
+        uint256 newbieNeeded = 3;
+        uint256 expPoolSize;
 
-        jurorManager.selectJurors(disputeId, thresholdFP, alphaFP, betaFP, expNeeded, newbieNeeded, experiencedPoolSize);
+        // Create a deal;
+        address daiTokenAddress = networkConfig.daiTokenAddress;
+        uint256 dealAmount = 1000e18;
+        uint256 dealId = _createERC20Deal(sender, receiver, daiTokenAddress, dealAmount);
+
+        // Then you should be able to open a dispute;
+        disputeId = _openDispute(sender, dealId);
+
+        // Register some jurors
+        address juror1 = _registerJuror(makeAddr("juror1"), 2000e18);
+        address juror2 = _registerJuror(makeAddr("juror2"), 4000e18);
+        address juror3 = _registerJuror(makeAddr("juror3"), 6000e18);
+        address juror4 = _registerJuror(makeAddr("juror4"), 8000e18);
+        address juror5 = _registerJuror(makeAddr("juror5"), 1500e18);
+        address juror6 = _registerJuror(makeAddr("juror6"), 9000e18);
+
+        // Get all active juror addresses
+        address[] memory jurorAddresses = jurorManager.getActiveJurorAddresses();
+        uint256 percentage = 6000; // Top 60% should be amongst the experienced. The remaining 40% will be with the newbies
+
+        // Send LinkToken to the JurorManager contract
+        LinkToken linktoken = LinkToken(networkConfig.linkTokenAddress);
+        
+
+
+
+        (thresholdFP, expPoolSize) = getThresholdAndExpPoolSize(jurorAddresses, percentage, alphaFP, betaFP);
+
+        // This function can only be called by the owner
+        uint256 requestId = jurorManager.selectJurors(disputeId, thresholdFP, alphaFP, betaFP, expNeeded, newbieNeeded, expPoolSize);
+
+        // Then call fulfillRandomWords
+    }
+
+    function _registerJuror(address jurorAddress, uint256 stakeAmount) internal returns (address) {
+        // Mint to the juror;
+        vm.prank(address(helperConfig));
+        bloom.mint(jurorAddress, stakeAmount);
+
+        // You can only stake with bloom token
+        vm.startPrank(jurorAddress);
+        bloom.approve(address(jurorManager), stakeAmount);
+
+        jurorManager.registerJuror(stakeAmount);
+        vm.stopPrank();
+
+        return jurorAddress;
+    }
+
+    // helper to compute score with fixed-point scaling (1e18)
+    function _computeScore(address jurorAddress, uint256 maxStake, uint256 maxRep, uint256 alphaFP, uint256 betaFP)
+        internal
+        pure
+        returns (uint256)
+    {
+        JurorManager.Juror memory j = jurorManager.getJuror(jurorAddress);
+        uint256 stakePart = (j.stakeAmount * 1e18) / maxStake;
+        uint256 repPart = ((j.reputation + 1) * 1e18) / (maxRep + 1);
+        return (alphaFP * stakePart + betaFP * repPart) / 1e18;
+    }
+
+    /// @notice Given jurors and a percentage (like 60 for 60%). This percentage is like saying, top 60% jurors are experienced
+    /// returns threshold and expPoolSize dynamically
+    function getThresholdAndExpPoolSize(
+        address[] memory jurorAddresses,
+        uint256 percentage,
+        uint256 alphaFP,
+        uint256 betaFP
+    ) public pure returns (uint256 thresholdFP, uint256 expPoolSize) {
+        // Get all the jurors in an array
+        JurorManager.Juror[] memory jurors = new JurorManager.Juror[](jurorAddresses.length);
+
+        for (uint256 i = 0; i < jurorAddresses.length; i++) {
+            jurors[i] = jurorManager.getJuror(jurorAddresses[i]);
+        }
+
+        uint256 jurorLength = jurors.length;
+
+        assert(jurorLength > 0);
+
+        // figure out maxStake and maxRep
+        uint256 maxStake;
+        uint256 maxRep;
+        for (uint256 i = 0; i < jurorLength; i++) {
+            if (jurors[i].stake > maxStake) maxStake = jurors[i].stake;
+            if (jurors[i].reputation > maxRep) maxRep = jurors[i].reputation;
+        }
+
+        // compute scores
+        uint256[] memory scores = new uint256[](jurorLength);
+        for (uint256 i = 0; i < jurorLength; i++) {
+            scores[i] = _computeScore(jurors[i], maxStake, maxRep, alphaFP, betaFP);
+        }
+
+        // sort descending (naive bubble sort for test only)
+        for (uint256 i = 0; i < jurorLength; i++) {
+            for (uint256 j = i + 1; j < jurorLength; j++) {
+                if (scores[j] > scores[i]) {
+                    (scores[i], scores[j]) = (scores[j], scores[i]);
+                }
+            }
+        }
+
+        expPoolSize = (jurorLength * percentage) / 10_000; // 100% = 10,000
+        if (expPoolSize == 0) {
+            return (type(uint256).max, 0); // means no experienced
+        }
+
+        uint256 sExp = scores[expPoolSize - 1]; // sExp is the last person in the experienced pool
+        if (expPoolSize < jurorLength) {
+            uint256 sNext = scores[expPoolSize]; // sNext is the person that follows the last person outside of the experienced pool
+            if (sExp > sNext) {
+                thresholdFP = (sExp + sNext) / 2;
+            } else {
+                // tie case, include all with score >= sExp
+                thresholdFP = sExp;
+                uint256 count = 0;
+                for (uint256 i = 0; i < jurorLength; i++) {
+                    if (scores[i] >= thresholdFP) count++;
+                }
+                expPoolSize = count;
+            }
+        } else {
+            // everyone is experienced
+            thresholdFP = 0;
+        }
     }
 }

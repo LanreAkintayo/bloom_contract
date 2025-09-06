@@ -160,7 +160,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
         uint256 expNeeded,
         uint256 newbieNeeded,
         uint256 experiencedPoolSize
-    ) external onlyOwner {
+    ) external onlyOwner returns (uint256) {
         // Don't select juror for a dispute that already has a juror
         if (disputeJurors[disputeId].length > 0) {
             revert JurorManager__AlreadyAssignedJurors();
@@ -241,6 +241,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
         lastRequestId = requestId;
         emit RequestSent(requestId, numWords);
         requestIdToDispute[requestId] = disputeId;
+        return requestId;
     }
 
     // ------------------- VRF CALLBACK -------------------
@@ -602,11 +603,11 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
         return disputeJurors[_disputeId];
     }
 
-    function getAllDisputeJurors() external view returns (address[] memory) {
+    function getAllJurorAddresses() external view returns (address[] memory) {
         return allJurorAddresses;
     }
 
-    function getAllActiveJurors() external view returns (address[] memory) {
+    function getActiveJurorAddresses() external view returns (address[] memory) {
         return activeJurorAddresses;
     }
 
