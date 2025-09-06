@@ -11,6 +11,10 @@ import {IERC20Mock} from "../src/interfaces/IERC20Mock.sol";
 import {TypesLib} from "../src/library/TypesLib.sol";
 import {JurorManager} from "../src/core/disputes/JurorManager.sol";
 import {DisputeStorage} from "../src/core/disputes/DisputeStorage.sol";
+import {LinkToken} from "@chainlink/contracts/src/v0.8/shared/token/ERC677/LinkToken.sol";
+import {VRFCoordinatorV2Mock} from "@chainlink/contracts/src/v0.8/vrf/mocks/VRFCoordinatorV2Mock.sol";
+
+
 
 contract JurorManagerTest is BaseJuror {
     // ------------------------
@@ -155,17 +159,22 @@ contract JurorManagerTest is BaseJuror {
         uint256 percentage = 6000; // Top 60% should be amongst the experienced. The remaining 40% will be with the newbies
 
         // Send LinkToken to the JurorManager contract
-        LinkToken linktoken = LinkToken(networkConfig.linkTokenAddress);
-        
-
-
+        LinkToken linkToken = LinkToken(networkConfig.linkAddress);
+        vm.prank(address(helperConfig));
+        linkToken.mint(address(jurorManager), 10000e18);
 
         (thresholdFP, expPoolSize) = getThresholdAndExpPoolSize(jurorAddresses, percentage, alphaFP, betaFP);
 
         // This function can only be called by the owner
+        vm.prank(jurorManager.owner());
         uint256 requestId = jurorManager.selectJurors(disputeId, thresholdFP, alphaFP, betaFP, expNeeded, newbieNeeded, expPoolSize);
 
         // Then call fulfillRandomWords
+        VRFCoordinatorV2Mock vrfCoordinator = helperConfig.getVRFCoordinator();
+
+        // Can only be called by the deployer
+        vm.prank(address(helperConfig));
+        vrfCoordinator.fulfillRandomWords(requestId, address(jurorManager));
     }
 
     function _registerJuror(address jurorAddress, uint256 stakeAmount) internal returns (address) {
@@ -186,7 +195,7 @@ contract JurorManagerTest is BaseJuror {
     // helper to compute score with fixed-point scaling (1e18)
     function _computeScore(address jurorAddress, uint256 maxStake, uint256 maxRep, uint256 alphaFP, uint256 betaFP)
         internal
-        pure
+        view
         returns (uint256)
     {
         JurorManager.Juror memory j = jurorManager.getJuror(jurorAddress);
@@ -202,7 +211,7 @@ contract JurorManagerTest is BaseJuror {
         uint256 percentage,
         uint256 alphaFP,
         uint256 betaFP
-    ) public pure returns (uint256 thresholdFP, uint256 expPoolSize) {
+    ) internal view returns (uint256 thresholdFP, uint256 expPoolSize) {
         // Get all the jurors in an array
         JurorManager.Juror[] memory jurors = new JurorManager.Juror[](jurorAddresses.length);
 
@@ -218,14 +227,14 @@ contract JurorManagerTest is BaseJuror {
         uint256 maxStake;
         uint256 maxRep;
         for (uint256 i = 0; i < jurorLength; i++) {
-            if (jurors[i].stake > maxStake) maxStake = jurors[i].stake;
+            if (jurors[i].stakeAmount > maxStake) maxStake = jurors[i].stakeAmount;
             if (jurors[i].reputation > maxRep) maxRep = jurors[i].reputation;
         }
 
         // compute scores
         uint256[] memory scores = new uint256[](jurorLength);
         for (uint256 i = 0; i < jurorLength; i++) {
-            scores[i] = _computeScore(jurors[i], maxStake, maxRep, alphaFP, betaFP);
+            scores[i] = _computeScore(jurors[i].jurorAddress, maxStake, maxRep, alphaFP, betaFP);
         }
 
         // sort descending (naive bubble sort for test only)

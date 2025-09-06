@@ -59,6 +59,7 @@ contract HelperConfig is CodeConstants, Script {
     // Local network state variables
     NetworkConfig public localNetworkConfig;
     mapping(uint256 chainId => NetworkConfig) public networkConfigs;
+    VRFCoordinatorV2Mock public vrfCoordinator;
 
     // MockV3Aggregator mockEthPriceFeed;
     // MockV3Aggregator mockUsdcPriceFeed;
@@ -141,7 +142,8 @@ contract HelperConfig is CodeConstants, Script {
 
         (
             LinkToken linkToken,
-            VRFV2Wrapper vrfV2Wrapper
+            VRFV2Wrapper vrfV2Wrapper,
+            VRFCoordinatorV2Mock _vrfCoordinator
         ) = _setUpVRF(address(mockEthPriceFeed));
 
         vm.stopBroadcast();
@@ -157,6 +159,8 @@ contract HelperConfig is CodeConstants, Script {
             wrapperAddress: address(vrfV2Wrapper),
             bloomTokenAddress: address(bloom)
         });
+
+        vrfCoordinator = _vrfCoordinator;
         return localNetworkConfig;
     }
 
@@ -180,7 +184,7 @@ contract HelperConfig is CodeConstants, Script {
 
     function _setUpVRF(address ethPriceFeed)
         internal
-        returns (LinkToken linkToken, VRFV2Wrapper vrfV2Wrapper)
+        returns (LinkToken, VRFV2Wrapper, VRFCoordinatorV2Mock)
     {
         // Mock base fee (minimum payment to request randomness)
         uint96 baseFee = 0.1 ether;
@@ -223,7 +227,12 @@ contract HelperConfig is CodeConstants, Script {
         vrfCoordinatorV2Mock.fundSubscription(subId, amount);
 
         // Return the deployed contracts
-        return (link, wrapper);
+        return (link, wrapper, vrfCoordinatorV2Mock);
+    }
+
+
+    function getVRFCoordinator() external view returns (VRFCoordinatorV2Mock) {
+        return vrfCoordinator;
     }
 
     function setUpRandomNumberStuff() external {
