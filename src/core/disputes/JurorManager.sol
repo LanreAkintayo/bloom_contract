@@ -249,7 +249,8 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
 
     // ------------------- VRF CALLBACK -------------------
     function fulfillRandomWords(uint256 _requestId, uint256[] memory _randomWords) internal override {
-        console.log("Request ID:", _requestId);
+        console.log("Request ID in the contract:", _requestId);
+        console.log("Random words:", _randomWords[0]);
 
         if (s_requests[_requestId].paid <= 0) {
             revert JurorManager__RequestNotFound();
@@ -297,6 +298,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
             }
 
             rand = uint256(keccak256(abi.encodePacked(rand, i))) % experiencedPool.length;
+            console.log("Random: ", rand);
         }
 
         // pick newbie jurors

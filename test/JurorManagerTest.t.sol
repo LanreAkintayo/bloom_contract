@@ -13,6 +13,7 @@ import {JurorManager} from "../src/core/disputes/JurorManager.sol";
 import {DisputeStorage} from "../src/core/disputes/DisputeStorage.sol";
 import {LinkToken} from "@chainlink/contracts/src/v0.8/shared/token/ERC677/LinkToken.sol";
 import {VRFCoordinatorV2Mock} from "@chainlink/contracts/src/v0.8/vrf/mocks/VRFCoordinatorV2Mock.sol";
+import {VRFV2Wrapper} from "@chainlink/contracts/src/v0.8/vrf/VRFV2Wrapper.sol";
 
 
 
@@ -178,9 +179,10 @@ contract JurorManagerTest is BaseJuror {
         
         // Can only be called by the deployer
         console.log("Calling fulfillRandomWords");
+        VRFV2Wrapper wrapper = helperConfig.getVRFV2Wrapper();
         VRFCoordinatorV2Mock vrfCoordinator = helperConfig.getVRFCoordinator();
         vm.prank(address(helperConfig));
-        vrfCoordinator.fulfillRandomWords(requestId, address(jurorManager));
+        vrfCoordinator.fulfillRandomWords(requestId, address(wrapper));
 
     }
 

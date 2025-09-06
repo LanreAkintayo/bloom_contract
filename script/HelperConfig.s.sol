@@ -60,6 +60,7 @@ contract HelperConfig is CodeConstants, Script {
     NetworkConfig public localNetworkConfig;
     mapping(uint256 chainId => NetworkConfig) public networkConfigs;
     VRFCoordinatorV2Mock public vrfCoordinator;
+    VRFV2Wrapper public wrapper;
 
     // MockV3Aggregator mockEthPriceFeed;
     // MockV3Aggregator mockUsdcPriceFeed;
@@ -200,7 +201,7 @@ contract HelperConfig is CodeConstants, Script {
         link.grantMintRole(address(this));
 
         // Deploy a mock VRF V2 wrapper with coordinator, LINK, and ETH price feed
-        VRFV2Wrapper wrapper = new VRFV2Wrapper(
+        wrapper = new VRFV2Wrapper(
             address(link),
             ethPriceFeed,
             address(vrfCoordinatorV2Mock)
@@ -234,6 +235,10 @@ contract HelperConfig is CodeConstants, Script {
 
     function getVRFCoordinator() external view returns (VRFCoordinatorV2Mock) {
         return vrfCoordinator;
+    }
+
+    function getVRFV2Wrapper() external view returns (VRFV2Wrapper) {
+        return wrapper;
     }
 
     function setUpRandomNumberStuff() external {
