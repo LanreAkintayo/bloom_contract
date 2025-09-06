@@ -5,4 +5,9 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 contract Bloom is ERC20 {
     constructor() ERC20("Bloom", "BLM") {}
+
+    
+    function mint(address account, uint256 amount) public {
+        _mint(account, amount);
+    }
 }

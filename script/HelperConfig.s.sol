@@ -6,6 +6,7 @@ import {Script, console2} from "forge-std/Script.sol";
 import {MockUSDC} from "../test/mocks/MockUSDC.sol";
 import {MockDAI} from "../test/mocks/MockDAI.sol";
 import {MockWETH} from "../test/mocks/MockWETH.sol";
+imoprt {VRFCoordinatorV2Mock} from "@chainlink-contracts/contracts/src/v0.8/vrf/mocks/VRFCoordinatorV2Mock.sol"
 
 abstract contract CodeConstants {
     // For ETH
@@ -44,6 +45,8 @@ contract HelperConfig is CodeConstants, Script {
         address usdcTokenAddress;
         address daiTokenAddress;
         address wethTokenAddress;
+        address linkAddress;
+        address wrapperAddress;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -86,7 +89,9 @@ contract HelperConfig is CodeConstants, Script {
             daiUsdPriceFeed: address(0),
             usdcTokenAddress: 0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174,
             daiTokenAddress: 0x6B175474E89094C44Da98b954EedeAC495271d0F,
-            wethTokenAddress: 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
+            wethTokenAddress: 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2,
+            linkAddress: 0x326C977E6efc84E512bB9C30f76E30c160eD06FB,
+            wrapperAddress: 0x326C977E6efc84E512bB9C30f76E30c160eD06FB
         });
         return sepoliaConfig;
     }
@@ -98,7 +103,9 @@ contract HelperConfig is CodeConstants, Script {
             daiUsdPriceFeed: address(0),
             usdcTokenAddress: address(0),
             daiTokenAddress: address(0),
-            wethTokenAddress: address(0)
+            wethTokenAddress: address(0),
+            linkAddress: address(0),
+            wrapperAddress: address(0)
         });
         return zkSyncSepoliaConfig;
     }
@@ -132,7 +139,9 @@ contract HelperConfig is CodeConstants, Script {
             daiUsdPriceFeed: address(mockDaiPriceFeed),
             usdcTokenAddress: address(mockUsdc),
             daiTokenAddress: address(mockDai),
-            wethTokenAddress: address(mockWeth)
+            wethTokenAddress: address(mockWeth),
+            linkAddress: address(0),
+            wrapperAddress: address(0)
         });
         return localNetworkConfig;
     }

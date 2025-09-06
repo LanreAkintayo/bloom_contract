@@ -71,7 +71,7 @@ contract BloomEscrow is ReentrancyGuard, EscrowTokens {
     //////////////////////////
 
     function addDisputeManager(address _disputeManagerAddress) external onlyOwner {
-        if (disputeManagerAddress == address(0)) {
+        if (_disputeManagerAddress == address(0)) {
             revert BloomEscrow__ZeroAddress();
         }
         // Only the contract deployer can set the dispute manager address

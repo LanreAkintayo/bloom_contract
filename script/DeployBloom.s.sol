@@ -1,22 +1,24 @@
 //SPDX-License-Identifier: MIT
 pragma solidity 0.8.20;
 
-
 import {Script} from "forge-std/Script.sol";
 import {Bloom} from "../src/token/Bloom.sol";
-
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {HelperConfig} from "./HelperConfig.s.sol";
 
 contract DeployBloom is Script {
-    Bloom public bloom;
-
-    function run() external {
-        deployContract();
+    function run() external returns (Bloom, HelperConfig) {
+        return deployBloom();
     }
 
-
-    function deployContract() internal returns (Bloom){
+    function deployBloom() internal returns (Bloom, HelperConfig) {
         // Implementation will sit here
-    }
+        HelperConfig helperConfig = new HelperConfig();
 
+        // Deploy the contracts;
+        vm.startBroadcast();
+        Bloom bloom = new Bloom();
+        vm.stopBroadcast();
+
+        return (bloom, helperConfig);
+    }
 }
