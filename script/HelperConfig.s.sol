@@ -197,6 +197,7 @@ contract HelperConfig is CodeConstants, Script {
 
         // Deploy a mock LINK token
         LinkToken link = new LinkToken();
+        link.grantMintRole(address(this));
 
         // Deploy a mock VRF V2 wrapper with coordinator, LINK, and ETH price feed
         VRFV2Wrapper wrapper = new VRFV2Wrapper(

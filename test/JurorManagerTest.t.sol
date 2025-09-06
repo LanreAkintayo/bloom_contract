@@ -170,11 +170,18 @@ contract JurorManagerTest is BaseJuror {
         uint256 requestId = jurorManager.selectJurors(disputeId, thresholdFP, alphaFP, betaFP, expNeeded, newbieNeeded, expPoolSize);
 
         // Then call fulfillRandomWords
-        VRFCoordinatorV2Mock vrfCoordinator = helperConfig.getVRFCoordinator();
+        // uint256[] memory randomWords = new uint256[](randomWords.length);
+        // randomWords[0] = 7854166079704491096882992406342334108369226379826116161446442989268089806461;
 
+        // jurorManager.fulfillRandomWords(requestId, randomWords);
+        // vm.stopPrank();
+        
         // Can only be called by the deployer
+        console.log("Calling fulfillRandomWords");
+        VRFCoordinatorV2Mock vrfCoordinator = helperConfig.getVRFCoordinator();
         vm.prank(address(helperConfig));
         vrfCoordinator.fulfillRandomWords(requestId, address(jurorManager));
+
     }
 
     function _registerJuror(address jurorAddress, uint256 stakeAmount) internal returns (address) {
@@ -202,6 +209,9 @@ contract JurorManagerTest is BaseJuror {
         uint256 stakePart = (j.stakeAmount * 1e18) / maxStake;
         uint256 repPart = ((j.reputation + 1) * 1e18) / (maxRep + 1);
         return (alphaFP * stakePart + betaFP * repPart) / 1e18;
+
+        // uint256 score = (alphaFP * j.stakeAmount / maxStake) + (betaFP * (j.reputation + 1) / (maxRep + 1));
+        // return score;
     }
 
     /// @notice Given jurors and a percentage (like 60 for 60%). This percentage is like saying, top 60% jurors are experienced

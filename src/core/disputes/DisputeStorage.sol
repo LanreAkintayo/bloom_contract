@@ -135,7 +135,7 @@ abstract contract DisputeStorage {
     uint256 public maxSlashPercentage = 5000; // 50% at most.
 
     // Chainlink VRF
-    uint32 public callbackGasLimit = 500000;
+    uint32 public callbackGasLimit = 1_600_000;
     uint16 public requestConfirmations = 3;
     uint32 public numWords = 1;
     address public linkAddress;

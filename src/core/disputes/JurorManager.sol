@@ -6,6 +6,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {VRFV2WrapperConsumerBase} from "@chainlink/contracts/src/v0.8/vrf/VRFV2WrapperConsumerBase.sol";
 
 import {DisputeManager} from "./DisputeManger.sol";
+import {console} from "forge-std/Test.sol";
 
 contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
     using SafeERC20 for IERC20;
@@ -177,8 +178,8 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
         uint256 expIndex = 0;
         uint256 newIndex = 0;
 
-        uint256 maxStake = 1;
-        uint256 maxReputation = 1;
+        uint256 maxStake = 0;
+        uint256 maxReputation = 0;
 
         //// find max stake & reputation
         for (uint256 i = 0; i < activeJurorAddresses.length; i++) {
@@ -199,7 +200,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
             if (juror.stakeAmount >= minStakeAmount) {
                 uint256 score =
                     computeScore(juror.stakeAmount, juror.reputation, maxStake, maxReputation, alphaFP, betaFP);
-
+                
                 if (score >= thresholdFP) {
                     experiencedPoolTemp[expIndex++] = juror.jurorAddress;
                     selectionScoresTemp[disputeId][juror.jurorAddress] = score;
@@ -237,6 +238,8 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
             randomWords: new uint256[](0),
             fulfilled: false
         });
+
+        console.log("Request ID: ", requestId);
         requestIds.push(requestId);
         lastRequestId = requestId;
         emit RequestSent(requestId, numWords);
@@ -246,6 +249,8 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
 
     // ------------------- VRF CALLBACK -------------------
     function fulfillRandomWords(uint256 _requestId, uint256[] memory _randomWords) internal override {
+        console.log("Request ID:", _requestId);
+
         if (s_requests[_requestId].paid <= 0) {
             revert JurorManager__RequestNotFound();
         }
