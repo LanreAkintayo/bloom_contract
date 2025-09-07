@@ -65,11 +65,11 @@ contract BaseJuror is Test {
         // Link FeeController and dispute manager to BloomEscrow
         vm.startPrank(bloomEscrow.owner());
 
-        console .log("Fee controller address: ", address(feeController));
-        console.log("Juror manager address: ", address(jurorManager));
-        console.log("usdcTokenAddress: ", networkConfig.usdcTokenAddress);
-        console.log("daiTokenAddress: ", networkConfig.daiTokenAddress);
-        console.log("wethTokenAddress: ", networkConfig.wethTokenAddress);
+        // console .log("Fee controller address: ", address(feeController));
+        // console.log("Juror manager address: ", address(jurorManager));
+        // console.log("usdcTokenAddress: ", networkConfig.usdcTokenAddress);
+        // console.log("daiTokenAddress: ", networkConfig.daiTokenAddress);
+        // console.log("wethTokenAddress: ", networkConfig.wethTokenAddress);
 
 
         bloomEscrow.addFeeController(address(feeController));

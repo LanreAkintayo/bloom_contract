@@ -22,3 +22,7 @@ The token address that was used in creating deal will be used to open dispute
 
 **Appeal**
 The token address that was used in creating deal will be used to appeal
+
+
+**Don't Forget**
+Don't forget to lock staked amount of the jurors oo

@@ -239,7 +239,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
             fulfilled: false
         });
 
-        console.log("Request ID: ", requestId);
+        // console.log("Request ID: ", requestId);
         requestIds.push(requestId);
         lastRequestId = requestId;
         emit RequestSent(requestId, numWords);
@@ -249,8 +249,8 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
 
     // ------------------- VRF CALLBACK -------------------
     function fulfillRandomWords(uint256 _requestId, uint256[] memory _randomWords) internal override {
-        console.log("Request ID in the contract:", _requestId);
-        console.log("Random words:", _randomWords[0]);
+        // console.log("Request ID in the contract:", _requestId);
+        // console.log("Random words:", _randomWords[0]);
 
         if (s_requests[_requestId].paid <= 0) {
             revert JurorManager__RequestNotFound();
@@ -265,14 +265,14 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
 
 
         // I want to print out the content of experienced pool and newbie pool for testing sake
-        console.log("Experienced Pool Length: ", experiencedPool.length);
+        // console.log("Experienced Pool Length: ", experiencedPool.length);
         for (uint256 i = 0; i < experiencedPool.length; i++) {
-            console.log("experienced pool address: ", experiencedPool[i], "with selection score : ", selectionScoresTemp[disputeId][experiencedPool[i]]);
+            // console.log("experienced pool address: ", experiencedPool[i], "with selection score : ", selectionScoresTemp[disputeId][experiencedPool[i]]);
         }
 
-        console.log("Newbie Pool Length: ", newbiePool.length);
+        // console.log("Newbie Pool Length: ", newbiePool.length);
         for (uint256 i = 0; i < newbiePool.length; i++) {
-            console.log("newbie pool address: ", newbiePool[i], "with selection score : ", selectionScoresTemp[disputeId][newbiePool[i]]);
+            // console.log("newbie pool address: ", newbiePool[i], "with selection score : ", selectionScoresTemp[disputeId][newbiePool[i]]);
         }
 
         uint256 expNeeded = experienceNeededByDispute[disputeId];
@@ -357,9 +357,9 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
         // As per they are active here, let me remove from them from the available jurors.
 
         // I want to print the list of all the selected jurors;
-        for (uint256 i = 0; i < selected.length; i++) {
-            console.log("Selected jurors: ", selected[i], "with selection score : ", selectionScoresTemp[disputeId][selected[i]]);
-        }
+        // for (uint256 i = 0; i < selected.length; i++) {
+        //     // console.log("Selected jurors: ", selected[i], "with selection score : ", selectionScoresTemp[disputeId][selected[i]]);
+        // }
 
         disputeJurors[disputeId] = selected;
         disputeTimer[disputeId] = Timer(disputeId, block.timestamp, votingPeriod, 0);

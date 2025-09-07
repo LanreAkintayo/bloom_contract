@@ -7,8 +7,8 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IBloomEscrow} from "../../interfaces/IBloomEscrow.sol";
 import {IFeeController} from "../../interfaces/IFeeController.sol";
 import {ConfirmedOwner} from "@chainlink/contracts/src/v0.8/shared/access/ConfirmedOwner.sol";
-
 import {DisputeStorage} from "./DisputeStorage.sol";
+import {console} from "forge-std/Test.sol";
 
 /// @title Dispute Manager for Bloom Escrow
 /// @notice Handles disputes and evidence for deals in BloomEscrow
@@ -46,11 +46,10 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
         EvidenceType evidenceType,
         string description
     );
-    event DisputeAppealed(uint256 indexed dealId, address indexed participant);
+    event DisputeAppealed(uint256 indexed dealId, uint256 indexed appealId, address indexed participant);
     event DisputeClosed(uint256 indexed _disputeId, address indexed initiator);
     event DisputeFinished(uint256 _disputeId, address winner, address loser, uint256 winnerCount, uint256 loserCount);
     event FundsReleasedToWinner(uint256 _disputeId, address winner);
-
 
     //////////////////////////
     // CONSTRUCTOR
@@ -93,7 +92,10 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
         });
 
         disputes[disputeId] = dispute;
-        dealToDispute[dealId] = disputeId;
+
+        if (dealToDispute[dealId] != 0) {
+            dealToDispute[dealId] = disputeId;
+        }
         disputeId++;
 
         // Charge dispute fee (if any) - omitted for simplicity
@@ -139,10 +141,11 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
         emit DisputeClosed(_disputeId, msg.sender);
     }
 
-    function appeal(uint256 _disputeId) external {
+    function appeal(uint256 _disputeId) external returns (uint256) {
         Dispute memory disputeToAppeal = disputes[_disputeId];
         uint256 dealId = disputeToAppeal.dealId;
         TypesLib.Deal memory deal = bloomEscrow.getDeal(dealId);
+        uint256 appealId = disputeId;
 
         // Increment appeal count by 1;
         appealCounts[_disputeId] += 1;
@@ -186,9 +189,10 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
         disputeAppeals[_disputeId].push(disputeId);
         disputeId++;
 
-        emit DisputeAppealed(dealId, msg.sender);
-
         // Emit an event
+        emit DisputeAppealed(dealId, appealId, msg.sender);
+
+        return appealId;
     }
 
     function finishDispute(uint256 _disputeId) external onlyOwner {
@@ -332,7 +336,6 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
             int256 newReputation = int256(oldReputation) + (int256(lambda) * int256(k)) / 1e18;
             juror.reputation = newReputation > 0 ? uint256(newReputation) : 0;
 
-            ongoingDisputeCount[currentAddress] -= 1;
             bool isPresent = isInActiveJurorAddresses(currentAddress);
 
             if (ongoingDisputeCount[currentAddress] <= ongoingDisputeThreshold && !isPresent) {
@@ -347,19 +350,22 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
         uint256[] memory allDisputeAppeals = disputeAppeals[_disputeId];
 
         // Always make use of the last dispute which would represent the last appeal
-        uint256 latestId = allDisputeAppeals.length > 0 ? _disputeId : allDisputeAppeals[allDisputeAppeals.length - 1];
-        Dispute memory latestDispute = disputes[latestId];
-        uint256 dealId = latestDispute.dealId;
-       
-        Timer memory latestDisputeTimer = disputeTimer[latestId];
-        uint256 endTime = latestDisputeTimer.startTime + latestDisputeTimer.standardVotingDuration + latestDisputeTimer.extendDuration;
+        uint256 latestId = allDisputeAppeals.length > 0 ? allDisputeAppeals[allDisputeAppeals.length - 1] : _disputeId;
 
-        if (block.timestamp < endTime + appealDuration){
+        Dispute memory latestDispute = disputes[latestId];
+
+        uint256 dealId = latestDispute.dealId;
+
+        Timer memory latestDisputeTimer = disputeTimer[latestId];
+        uint256 endTime =
+            latestDisputeTimer.startTime + latestDisputeTimer.standardVotingDuration + latestDisputeTimer.extendDuration;
+
+        if (block.timestamp < endTime + appealDuration) {
             revert DisputeManager__AppealTime();
         }
 
         // Make sure that this is called by the winner of the dispute
-        if (latestDispute.winner != msg.sender){
+        if (latestDispute.winner != msg.sender) {
             revert DisputeManager__OnlyWinner();
         }
 
@@ -455,7 +461,11 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
         return activeJurorAddresses[jurorAddressIndex[_jurorAddress]] == _jurorAddress;
     }
 
-      function getDisputeCandidate(uint256 _disputeId, address _jurorAddress) external view returns (Candidate memory) {
+    function getDispute(uint256 _disputeId) external view returns (Dispute memory) {
+        return disputes[_disputeId];
+    }
+
+    function getDisputeCandidate(uint256 _disputeId, address _jurorAddress) external view returns (Candidate memory) {
         return isDisputeCandidate[_disputeId][_jurorAddress];
     }
 
