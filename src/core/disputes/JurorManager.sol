@@ -263,6 +263,18 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
         address[] memory experiencedPool = experiencedPoolTemporary[disputeId];
         address[] memory newbiePool = newbiePoolTemporary[disputeId];
 
+
+        // I want to print out the content of experienced pool and newbie pool for testing sake
+        console.log("Experienced Pool Length: ", experiencedPool.length);
+        for (uint256 i = 0; i < experiencedPool.length; i++) {
+            console.log("experienced pool address: ", experiencedPool[i], "with selection score : ", selectionScoresTemp[disputeId][experiencedPool[i]]);
+        }
+
+        console.log("Newbie Pool Length: ", newbiePool.length);
+        for (uint256 i = 0; i < newbiePool.length; i++) {
+            console.log("newbie pool address: ", newbiePool[i], "with selection score : ", selectionScoresTemp[disputeId][newbiePool[i]]);
+        }
+
         uint256 expNeeded = experienceNeededByDispute[disputeId];
         uint256 newbieNeeded = newbieNeededByDispute[disputeId];
         uint256 total = expNeeded + newbieNeeded;
@@ -297,14 +309,14 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
                 mstore(experiencedPool, sub(mload(experiencedPool), 1))
             }
 
-            rand = uint256(keccak256(abi.encodePacked(rand, i))) % experiencedPool.length;
+            rand = uint256(keccak256(abi.encodePacked(rand, i)));
             console.log("Random: ", rand);
         }
 
         // pick newbie jurors
         for (uint256 i = 0; i < newbieNeeded; i++) {
             uint256 pickIdx = rand % newbiePool.length;
-            address selectedJurorAddress = experiencedPool[pickIdx];
+            address selectedJurorAddress = newbiePool[pickIdx];
             Juror memory correspondingJuror = jurors[selectedJurorAddress];
             selected[idx++] = selectedJurorAddress;
 
@@ -319,7 +331,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
             );
 
             // Track all the disputes per juror
-            jurorDisputeHistory[experiencedPool[pickIdx]].push(disputeId);
+            jurorDisputeHistory[selectedJurorAddress].push(disputeId);
 
             // swap-remove
             newbiePool[pickIdx] = newbiePool[newbiePool.length - 1];
@@ -327,7 +339,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
                 mstore(newbiePool, sub(mload(newbiePool), 1))
             }
 
-            rand = uint256(keccak256(abi.encodePacked(rand, i))) % newbiePool.length;
+            rand = uint256(keccak256(abi.encodePacked(rand, i)));
         }
 
         // mark jurors active
@@ -343,6 +355,11 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
         }
 
         // As per they are active here, let me remove from them from the available jurors.
+
+        // I want to print the list of all the selected jurors;
+        for (uint256 i = 0; i < selected.length; i++) {
+            console.log("Selected jurors: ", selected[i], "with selection score : ", selectionScoresTemp[disputeId][selected[i]]);
+        }
 
         disputeJurors[disputeId] = selected;
         disputeTimer[disputeId] = Timer(disputeId, block.timestamp, votingPeriod, 0);

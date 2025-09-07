@@ -97,7 +97,6 @@ abstract contract DisputeStorage {
     mapping(uint256 dealId => mapping(address => Evidence[])) public dealEvidences;
 
     // Jurors
-    mapping(address jurorAddress => uint256) public ongoingSelection; // This is only for when you are selected. It will be decremented as soon as 
     mapping(address jurorAddress => Juror) public jurors;
     address[] public allJurorAddresses;
     mapping(address jurorAddress => bool) public isJurorActive;

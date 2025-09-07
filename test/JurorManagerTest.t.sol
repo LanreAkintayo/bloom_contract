@@ -15,8 +15,6 @@ import {LinkToken} from "@chainlink/contracts/src/v0.8/shared/token/ERC677/LinkT
 import {VRFCoordinatorV2Mock} from "@chainlink/contracts/src/v0.8/vrf/mocks/VRFCoordinatorV2Mock.sol";
 import {VRFV2Wrapper} from "@chainlink/contracts/src/v0.8/vrf/VRFV2Wrapper.sol";
 
-
-
 contract JurorManagerTest is BaseJuror {
     // ------------------------
     // Helper functions
@@ -168,22 +166,97 @@ contract JurorManagerTest is BaseJuror {
 
         // This function can only be called by the owner
         vm.prank(jurorManager.owner());
-        uint256 requestId = jurorManager.selectJurors(disputeId, thresholdFP, alphaFP, betaFP, expNeeded, newbieNeeded, expPoolSize);
+        uint256 requestId =
+            jurorManager.selectJurors(disputeId, thresholdFP, alphaFP, betaFP, expNeeded, newbieNeeded, expPoolSize);
 
         // Then call fulfillRandomWords
-        // uint256[] memory randomWords = new uint256[](randomWords.length);
-        // randomWords[0] = 7854166079704491096882992406342334108369226379826116161446442989268089806461;
-
-        // jurorManager.fulfillRandomWords(requestId, randomWords);
-        // vm.stopPrank();
-        
-        // Can only be called by the deployer
-        console.log("Calling fulfillRandomWords");
         VRFV2Wrapper wrapper = helperConfig.getVRFV2Wrapper();
         VRFCoordinatorV2Mock vrfCoordinator = helperConfig.getVRFCoordinator();
         vm.prank(address(helperConfig));
         vrfCoordinator.fulfillRandomWords(requestId, address(wrapper));
 
+        // Check states;
+        // Let's use juror 1
+        uint256[] memory jurorHistory = jurorManager.getJurorDisputeHistory(juror1);
+        assertEq(jurorHistory[0], disputeId);
+        assertEq(jurorManager.ongoingDisputeCount(juror1), 1);
+        address[] memory disputeJurors = jurorManager.getDisputeJurors(disputeId);
+        assertEq(disputeJurors.length,  newbieNeeded + expNeeded);
+        JurorManager.Candidate memory candidate = jurorManager.getDisputeCandidate(disputeId, juror1);
+        assertEq(candidate.stakeAmount, 2000e18);
+    }
+
+    function canVote() external {
+        // Juros can vote;
+
+        // Create Deal
+
+        // Open dispute
+
+        // Select Jurors
+
+        // Juror votes
+
+        // Check to see if votes are registered perfectly.
+
+
+         uint256 disputeId;
+        uint256 thresholdFP;
+        uint256 alphaFP = 0.6e18; // Stake is stronger
+        uint256 betaFP = 0.4e18; // Reputation is betaFP
+        uint256 expNeeded = 2;
+        uint256 newbieNeeded = 3;
+        uint256 expPoolSize;
+
+        // Create a deal;
+        address daiTokenAddress = networkConfig.daiTokenAddress;
+        uint256 dealAmount = 1000e18;
+        uint256 dealId = _createERC20Deal(sender, receiver, daiTokenAddress, dealAmount);
+
+        // Then you should be able to open a dispute;
+        disputeId = _openDispute(sender, dealId);
+
+        // Register some jurors
+        address juror1 = _registerJuror(makeAddr("juror1"), 2000e18);
+        address juror2 = _registerJuror(makeAddr("juror2"), 4000e18);
+        address juror3 = _registerJuror(makeAddr("juror3"), 6000e18);
+        address juror4 = _registerJuror(makeAddr("juror4"), 8000e18);
+        address juror5 = _registerJuror(makeAddr("juror5"), 1500e18);
+        address juror6 = _registerJuror(makeAddr("juror6"), 9000e18);
+
+        // Get all active juror addresses
+        address[] memory jurorAddresses = jurorManager.getActiveJurorAddresses();
+        uint256 percentage = 6000; // Top 60% should be amongst the experienced. The remaining 40% will be with the newbies
+
+        // Send LinkToken to the JurorManager contract
+        LinkToken linkToken = LinkToken(networkConfig.linkAddress);
+        vm.prank(address(helperConfig));
+        linkToken.mint(address(jurorManager), 10000e18);
+
+        (thresholdFP, expPoolSize) = getThresholdAndExpPoolSize(jurorAddresses, percentage, alphaFP, betaFP);
+
+        // This function can only be called by the owner
+        vm.prank(jurorManager.owner());
+        uint256 requestId =
+            jurorManager.selectJurors(disputeId, thresholdFP, alphaFP, betaFP, expNeeded, newbieNeeded, expPoolSize);
+
+        // Then call fulfillRandomWords
+        VRFV2Wrapper wrapper = helperConfig.getVRFV2Wrapper();
+        VRFCoordinatorV2Mock vrfCoordinator = helperConfig.getVRFCoordinator();
+        vm.prank(address(helperConfig));
+        vrfCoordinator.fulfillRandomWords(requestId, address(wrapper));
+
+        // Check states;
+        // Let's use juror 1
+        uint256[] memory jurorHistory = jurorManager.getJurorDisputeHistory(juror1);
+        assertEq(jurorHistory[0], disputeId);
+        assertEq(jurorManager.ongoingDisputeCount(juror1), 1);
+        address[] memory disputeJurors = jurorManager.getDisputeJurors(disputeId);
+        assertEq(disputeJurors.length,  newbieNeeded + expNeeded);
+        JurorManager.Candidate memory candidate = jurorManager.getDisputeCandidate(disputeId, juror1);
+        assertEq(candidate.stakeAmount, 2000e18);
+
+        
     }
 
     function _registerJuror(address jurorAddress, uint256 stakeAmount) internal returns (address) {
