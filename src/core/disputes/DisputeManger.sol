@@ -66,7 +66,7 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
 
     /// @notice Opens a dispute for a given deal
     /// @param dealId The ID of the deal
-    function openDispute(uint256 dealId) external {
+    function openDispute(uint256 dealId) external returns (uint256) {
         TypesLib.Deal memory deal = bloomEscrow.getDeal(dealId);
 
         // You cannot open a dispute if one is already opened for this deal
@@ -91,12 +91,12 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
             winner: address(0)
         });
 
+        disputeId++;
         disputes[disputeId] = dispute;
 
-        if (dealToDispute[dealId] != 0) {
+        if (dealToDispute[dealId] == 0) {
             dealToDispute[dealId] = disputeId;
         }
-        disputeId++;
 
         // Charge dispute fee (if any) - omitted for simplicity
         uint256 disputeFee = 0;
@@ -121,6 +121,7 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
         bloomEscrow.updateStatus(dealId, TypesLib.Status.Disputed);
 
         emit DisputeOpened(dealId, msg.sender);
+        return disputeId;
     }
 
     function closeDispute(uint256 _disputeId) external {
@@ -145,7 +146,6 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
         Dispute memory disputeToAppeal = disputes[_disputeId];
         uint256 dealId = disputeToAppeal.dealId;
         TypesLib.Deal memory deal = bloomEscrow.getDeal(dealId);
-        uint256 appealId = disputeId;
 
         // Increment appeal count by 1;
         appealCounts[_disputeId] += 1;
@@ -185,14 +185,27 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
             }
         }
 
-        // Link the dispute Id to the appeal
-        disputeAppeals[_disputeId].push(disputeId);
         disputeId++;
 
-        // Emit an event
-        emit DisputeAppealed(dealId, appealId, msg.sender);
+        Dispute memory dispute = Dispute({
+            dealId: dealId,
+            initiator: msg.sender,
+            sender: deal.sender,
+            receiver: deal.receiver,
+            winner: address(0)
+        });
 
-        return appealId;
+        
+        disputes[disputeId] = dispute;
+
+        // Link the dispute Id to the appeal
+        disputeAppeals[_disputeId].push(disputeId);
+        appealToDispute[disputeId] = _disputeId; // Appeal id is the disputeId, the _disputeId is passed from the function
+
+        // Emit an event
+        emit DisputeAppealed(dealId, disputeId, msg.sender);
+
+        return disputeId;
     }
 
     function finishDispute(uint256 _disputeId) external onlyOwner {
@@ -211,6 +224,12 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
         // Determine the winner;
         (bool tie, address winner, address loser, uint256 winnerCount, uint256 loserCount) =
             _determineWinner(_disputeId, allVotes);
+
+            // console.log("Tie: ", tie);
+            // console.log("Winner: ", winner);
+            // console.log("Loser: ", loser);
+            // console.log("Winner Count: ", winnerCount);
+            // console.log("Loser Count: ", loserCount);
 
         // Update the reward and reputation accordingly
         _distributeRewardAndReputation(tie, _disputeId, winner, winnerCount);
@@ -271,12 +290,16 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
             uint256 currentStakeAmount = currentCandidate.stakeAmount;
             Vote memory currentVote = disputeVotes[_disputeId][currentJurorAddress];
 
+            // console.log("ongoing dispute count of ", currentJurorAddress, " is ", ongoingDisputeCount[currentJurorAddress]);
+
             ongoingDisputeCount[currentJurorAddress] -= 1;
 
             if (currentVote.support != address(0)) {
                 if (currentVote.support != winner) {
                     uint256 amountDeducted = (currentStakeAmount * slashPercentage) / MAX_PERCENT;
                     totalAmountSlashed += amountDeducted;
+
+                    // console.log("amount deducted: ", amountDeducted);
 
                     if (currentCandidate.jurorAddress != owner()) {
                         Juror storage juror = jurors[currentJurorAddress];
@@ -287,7 +310,11 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
                         uint256 oldReputation = juror.reputation;
                         int256 newReputation = int256(oldReputation) - (int256(lambda) * int256(k)) / 1e18;
 
+                        // console.log("new reputation: ", newReputation);
+
                         juror.reputation = newReputation > 0 ? uint256(newReputation) : 0;
+
+                        // console.log("Juror reputation: ", juror.reputation);
 
                         // We don't need to update the Candidate struct because it is only used to note the staked value as at when selected to vote.
                     }
@@ -297,6 +324,8 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
                 }
             } else {
                 // The candidates here did not vote at all but they were chosen
+
+                // console.log("Will it ever enter here");
 
                 uint256 deductedAmount = currentStakeAmount * noVoteSlashPercentage / MAX_PERCENT;
                 Juror storage juror = jurors[currentJurorAddress];

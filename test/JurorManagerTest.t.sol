@@ -667,32 +667,73 @@ contract JurorManagerTest is BaseJuror {
         // Select Jurors
         uint256 expNeeded2 = 3;
         uint256 newbieNeeded2 = 2;
-        _selectJurors(appealId, expNeeded, newbieNeeded);
+        _selectJurors(appealId, expNeeded2, newbieNeeded2);
 
         // Get all the jurors assigned to disputeId;
         address[] memory disputeJurors2 = jurorManager.getDisputeJurors(appealId);
 
-        // Get the dispute itself;
-        JurorManager.Dispute memory dispute = jurorManager.getDispute(disputeId);
+        // Get the appeal dispute itself;
+        // Get corresponding disputeId for the appeal
+        // uint256 correspondingDisputeId = jurorManager.appealToDispute(appealId);
+        JurorManager.Dispute memory appealDispute = jurorManager.getDispute(appealId);
 
         // Juros can vote;
-        address disputeJuror1 = disputeJurors[0];
-        address disputeJuror2 = disputeJurors[1];
-        address disputeJuror3 = disputeJurors[2];
+        address appealDisputeJuror1 = disputeJurors2[0];
+        address appealDisputeJuror2 = disputeJurors2[1];
+        address appealDisputeJuror3 = disputeJurors2[2];
+        address appealDisputeJuror4 = disputeJurors2[3];
+        address appealDisputeJuror5 = disputeJurors2[4];
 
-        _vote(disputeId, disputeJuror1, dispute.sender);
-        _vote(disputeId, disputeJuror2, dispute.receiver);
-        _vote(disputeId, disputeJuror3, dispute.sender);
+        _vote(appealId, appealDisputeJuror1, appealDispute.sender);
+        _vote(appealId, appealDisputeJuror2, appealDispute.receiver);
+        _vote(appealId, appealDisputeJuror3, appealDispute.sender);
+        _vote(appealId, appealDisputeJuror4, appealDispute.sender);
+        _vote(appealId, appealDisputeJuror5, appealDispute.sender);
+  
 
         // Fast forward time;
         vm.warp(block.timestamp + 48 hours);
 
         // Finish dispute;
         vm.startPrank(jurorManager.owner());
-        jurorManager.finishDispute(disputeId);
+        jurorManager.finishDispute(appealId);
         vm.stopPrank();
 
+        // Then the last winner withdraws;
+          // Trying to relase funds before the appeal period;
+         // Winner cannot pull out funds because there is still a room for apeal
+        vm.startPrank(appealDispute.sender);
+        vm.expectRevert(abi.encodeWithSelector(DisputeManager.DisputeManager__AppealTime.selector));
+        jurorManager.releaseFundsToWinner(appealId);
+        vm.stopPrank();
+
+        // Fast forward to after appeal period;
+        vm.warp(block.timestamp + jurorManager.appealDuration());
+
+
+        // Loser cannot call releaseFundsToWinner
+        vm.startPrank(appealDispute.receiver);
+        vm.expectRevert(abi.encodeWithSelector(DisputeManager.DisputeManager__OnlyWinner.selector));
+        jurorManager.releaseFundsToWinner(appealId);
+        vm.stopPrank();
+
+        // Check the balance of the winner before funds is released;
+        uint256 winnerTokenBalanceBefore = token.balanceOf(appealDispute.sender);
+
+        // Release funds to winner
+        vm.startPrank(appealDispute.sender);
+        jurorManager.releaseFundsToWinner(appealId);
+        vm.stopPrank();
+
+        uint256 winnerTokenBalanceAfter = token.balanceOf(appealDispute.sender);
+
+        assertEq(winnerTokenBalanceAfter, winnerTokenBalanceBefore + deal.amount);
+
+
+
     }
+
+    // function test
 
     function _registerJuror(address jurorAddress, uint256 stakeAmount) internal returns (address) {
         // Mint to the juror;

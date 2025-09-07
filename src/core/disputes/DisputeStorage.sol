@@ -124,6 +124,7 @@ abstract contract DisputeStorage {
     mapping(uint256 disputeId => uint256[] appeals) public disputeAppeals;
     mapping(uint256 disputeId => uint256) public appealCounts;
     uint256 public appealDuration = 24 hours;
+    mapping(uint256 appealId => uint256 disputeId) public appealToDispute;
 
 
     // Staking rules
