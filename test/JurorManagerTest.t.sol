@@ -764,12 +764,17 @@ contract JurorManagerTest is BaseJuror {
         votes3[1] = sender;
         votes3[2] = receiver;
         
-        // Vote
-
         // At this point, we have to add jurors after 48 hours have elapsed. Add 2 more jurors.
+         for (uint256 i = 0; i < jurors3.length; i++) {
+            _vote(disputeId, jurors3[i], votes3[i]);
+        }
 
+        // At this point, jurors starting from index 3 to 6 did not vote. So, we add new jurors;
+        vm.prank(jurorManager.owner());
+        jurorManager.addJuror(appealId2, 4, 24 hours);
 
-        _voteFlow(appealId2, jurors3, votes3);
+        // Trying to add new jurors before the voting period elapse should fail
+
 
 
         // Winner claims funds
