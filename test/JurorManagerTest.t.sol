@@ -113,9 +113,6 @@ contract JurorManagerTest is BaseJuror {
         for (uint256 i = 0; i < jurors.length; i++) {
             _vote(disputeId, jurors[i], votes[i]);
         }
-        // fast forward and finish
-        console.log("In _voteFlow, block.timestamp is ", block.timestamp);
-        console.log("In _voteFlow, jurorManager.votingPeriod() is ", jurorManager.votingPeriod());
 
         vm.warp(block.timestamp + jurorManager.votingPeriod());
         vm.startPrank(jurorManager.owner());
@@ -707,7 +704,88 @@ contract JurorManagerTest is BaseJuror {
 
     
     function testCanPenalizeIfVoteMissed() external {
-        // Here, we have a dispute, 
+        // Here, we create a deal, open dispute, jurors vote on the dispute, then create appeal twice. After creating appwal twice, then some jurors will not vote. Now check whether the jurors that did not vote will be appropriately penalize. Also check if the states would be updated to missed.
+
+         // Create a deal;
+        address daiTokenAddress = networkConfig.daiTokenAddress;
+        uint256 dealAmount = 1000e18;
+        uint256 dealId = _createERC20Deal(sender, receiver, daiTokenAddress, dealAmount);
+        TypesLib.Deal memory deal = bloomEscrow.getDeal(dealId);
+
+        // Then you should be able to open a dispute;
+        uint256 disputeId = _openDispute(sender, dealId);
+
+        // Register some jurors
+        _registerJuror(makeAddr("juror1"), 2000e18);
+        _registerJuror(makeAddr("juror2"), 4000e18);
+        _registerJuror(makeAddr("juror3"), 6000e18);
+        _registerJuror(makeAddr("juror4"), 8000e18);
+        _registerJuror(makeAddr("juror5"), 1500e18);
+        _registerJuror(makeAddr("juror6"), 11000e18);
+        _registerJuror(makeAddr("juror7"), 1000e18);
+        _registerJuror(makeAddr("juror8"), 4300e18);
+        _registerJuror(makeAddr("juror9"), 14000e18);
+        _registerJuror(makeAddr("juror10"), 765000e18);
+
+        // Select jurors
+        _selectJurors(disputeId, 2, 1); // 2 = expNeeded, 1 = newbieNeeded
+        address[] memory jurors1 = jurorManager.getDisputeJurors(disputeId);
+        address[] memory votes1 = new address[](jurors1.length);
+        votes1[0] = sender;
+        votes1[1] = receiver;
+        votes1[2] = sender;
+        _voteFlow(disputeId, jurors1, votes1);
+
+        // vm.warp(block.timestamp + jurorManager.appealDuration());
+
+        // First appeal
+        uint256 appealId1 = _appealFlow(disputeId, receiver, IERC20Mock(daiTokenAddress), deal.amount, 2);
+
+        _selectJurors(appealId1, 3, 2); // 3 = expNeeded, 2 = newbieNeeded
+        address[] memory jurors2 = jurorManager.getDisputeJurors(appealId1);
+        address[] memory votes2 = new address[](jurors2.length);
+        votes2[0] = sender;
+        votes2[1] = receiver;
+        votes2[2] = sender;
+        votes2[3] = sender;
+        votes2[4] = sender;
+        _voteFlow(appealId1, jurors2, votes2);
+
+        // Fast forward to after appeal period;
+        // vm.warp(block.timestamp + jurorManager.appealDuration());
+
+        // Second appeal
+        uint256 appealId2 = _appealFlow(disputeId, receiver, IERC20Mock(daiTokenAddress), deal.amount, 3);
+
+        _selectJurors(appealId2, 5, 2); // 5 = expNeeded, 2 = newbieNeeded
+        address[] memory jurors3 = jurorManager.getDisputeJurors(appealId2);
+        address[] memory votes3 = new address[](jurors3.length);
+        votes3[0] = receiver;
+        votes3[1] = sender;
+        votes3[2] = receiver;
+        
+        // Vote
+
+        // At this point, we have to add jurors after 48 hours have elapsed. Add 2 more jurors.
+
+
+        _voteFlow(appealId2, jurors3, votes3);
+
+
+        // Winner claims funds
+        vm.warp(block.timestamp + jurorManager.appealDuration());
+
+        JurorManager.Dispute memory finalDispute = jurorManager.getDispute(appealId2);
+        uint256 balBefore = IERC20Mock(daiTokenAddress).balanceOf(finalDispute.receiver);
+
+        vm.startPrank(finalDispute.receiver);
+        jurorManager.releaseFundsToWinner(appealId2);
+        vm.stopPrank();
+
+        uint256 balAfter = IERC20Mock(daiTokenAddress).balanceOf(finalDispute.receiver);
+        assertEq(balAfter, balBefore + deal.amount);
+
+
     }
 
     function _registerJuror(address jurorAddress, uint256 stakeAmount) internal returns (address) {
