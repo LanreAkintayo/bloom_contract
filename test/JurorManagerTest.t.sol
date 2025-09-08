@@ -136,18 +136,26 @@ contract JurorManagerTest is BaseJuror {
         vm.stopPrank();
     }
 
-    function _getNewlyAddedJurors(uint256 disputeId) internal returns (address[] memory) {
+    function _getNewlyAddedJurors(uint256 disputeId) internal view returns (address[] memory) {
         address[] memory disputeJurors = jurorManager.getDisputeJurors(disputeId);
         address[] memory newlyAdded = new address[](disputeJurors.length);
         uint256 newlyAddedCount = 0;
 
         for (uint256 i = 0; i < disputeJurors.length; i++) {
             address currentJurorAddress = disputeJurors[i];
+            // console.log("Current juror address in _getNewlyAdded Jurors: ", currentJurorAddress);
+            JurorManager.Candidate memory isDisputeCandidate =
+                jurorManager.getDisputeCandidate(disputeId, currentJurorAddress);
             JurorManager.Vote memory currentVote = jurorManager.getDisputeVote(disputeId, currentJurorAddress);
-            if (!currentVote.support) {
-                newlyAdded[i] = currentJurorAddress;
+            if (!isDisputeCandidate.missed && currentVote.support == address(0)) {
+                // console.log("Missed jurror: ", currentJurorAddress);
+                newlyAdded[newlyAddedCount] = currentJurorAddress;
                 newlyAddedCount++;
             }
+        }
+
+        assembly {
+            mstore(newlyAdded, newlyAddedCount)
         }
 
         return newlyAdded;
@@ -194,6 +202,16 @@ contract JurorManagerTest is BaseJuror {
         // missed: since it's bool, you can add another param to decide if to check
         if (checkMissed) {
             assertEq(candidate.missed, _missed);
+        }
+    }
+
+    function _assertNotReAdded(address[] memory newlyAdded, address[] memory jurors) internal pure {
+        for (uint256 i = 0; i < jurors.length; i++) {
+            address currentJurorAddress = jurors[i];
+            for (uint256 j = 0; j < newlyAdded.length; j++) {
+                address currentNewlyAdded = newlyAdded[j];
+                assertNotEq(currentJurorAddress, currentNewlyAdded);
+            }
         }
     }
 
@@ -741,7 +759,10 @@ contract JurorManagerTest is BaseJuror {
         _registerJuror(makeAddr("juror7"), 1000e18);
         _registerJuror(makeAddr("juror8"), 4300e18);
         _registerJuror(makeAddr("juror9"), 14000e18);
-        _registerJuror(makeAddr("juror10"), 765000e18);
+        _registerJuror(makeAddr("juror10"), 725000e18);
+        _registerJuror(makeAddr("juror11"), 125000e18);
+        _registerJuror(makeAddr("juror12"), 55000e18);
+        _registerJuror(makeAddr("juror13"), 656500e18);
 
         // Select jurors
         _selectJurors(disputeId, 2, 1); // 2 = expNeeded, 1 = newbieNeeded
@@ -775,17 +796,19 @@ contract JurorManagerTest is BaseJuror {
 
         _selectJurors(appealId2, 5, 2); // 5 = expNeeded, 2 = newbieNeeded
         address[] memory jurors3 = jurorManager.getDisputeJurors(appealId2);
-        address[] memory votes3 = new address[](jurors3.length);
-        votes3[0] = receiver;
+        address[] memory votes3 = new address[](3);
+        votes3[0] = sender;
         votes3[1] = sender;
-        votes3[2] = receiver;
+        votes3[2] = sender;
 
         // At this point, we have to add jurors after 48 hours have elapsed. Add 2 more jurors.
-        for (uint256 i = 0; i < jurors3.length; i++) {
-            _vote(disputeId, jurors3[i], votes3[i]);
+        for (uint256 i = 0; i < votes3.length; i++) {
+            _vote(appealId2, jurors3[i], votes3[i]);
         }
 
         // At this point, jurors starting from index 3 to 6 did not vote. So, we add new jurors;
+        vm.warp(block.timestamp + jurorManager.votingPeriod());
+
         vm.prank(jurorManager.owner());
         jurorManager.addJuror(appealId2, 4, 24 hours);
 
@@ -805,24 +828,31 @@ contract JurorManagerTest is BaseJuror {
         _assertNotReAdded(newlyAdded, jurors3);
 
         // First and second votes;
-        _vote(appealId2, newlyAdded[0], sender);
+        _vote(appealId2, newlyAdded[0], receiver);
         _vote(appealId2, newlyAdded[1], receiver);
+
+        vm.warp(block.timestamp + jurorManager.votingPeriod());
 
         // Admin comes in to vote.
         vm.prank(jurorManager.owner());
-        jurorManager.adminParticipateInDispute(appealId2);
+        jurorManager.adminParticipateInDispute(appealId2, receiver);
+      
 
         // Dispute finishes
         vm.warp(block.timestamp + jurorManager.votingPeriod());
         vm.startPrank(jurorManager.owner());
-        jurorManager.finishDispute(disputeId);
+        jurorManager.finishDispute(appealId2);
         vm.stopPrank();
 
         // Winner claims funds
         vm.warp(block.timestamp + jurorManager.appealDuration());
 
         JurorManager.Dispute memory finalDispute = jurorManager.getDispute(appealId2);
-        address newWinner = jurorManager.getDispute(appealId2);
+        address newWinner = finalDispute.winner;
+
+        console.log("New winner is: ", newWinner);
+        console.log("Sender is: ", sender);
+        console.log("Receiver is: ", receiver);
 
         // uint256 balBefore = IERC20Mock(daiTokenAddress).balanceOf(finalDispute.receiver);
 

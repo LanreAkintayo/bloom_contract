@@ -19,7 +19,6 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
     mapping(uint256 => uint256) private newbieNeededByDispute;
     mapping(uint256 => uint256) private requestIdToDispute;
     mapping(uint256 => mapping(address => uint256)) private selectionScoresTemp;
-    
 
     /*//////////////////////////////////////////////////////////////
                                 ERRORS
@@ -54,7 +53,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
     event RequestSent(uint256 requestId, uint32 numWords);
     event RequestFulfilled(uint256 requestId, uint256[] randomWords, uint256 payment);
     event Voted(uint256 indexed disputeId, address indexed jurorAddress, address indexed support);
-    event AdminParticipatedInDispute(uint256 indexed _disputeId);
+    event AdminParticipatedInDispute(uint256 indexed _disputeId, address indexed support);
     event JurorAdded(uint256 indexed _disputeId, address[] indexed newJurors);
     event StandardVotingDurationExtended(uint256 indexed _disputeId, uint256 indexed _extendDuration);
 
@@ -201,7 +200,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
             if (juror.stakeAmount >= minStakeAmount) {
                 uint256 score =
                     computeScore(juror.stakeAmount, juror.reputation, maxStake, maxReputation, alphaFP, betaFP);
-                
+
                 if (score >= thresholdFP) {
                     experiencedPoolTemp[expIndex++] = juror.jurorAddress;
                     selectionScoresTemp[disputeId][juror.jurorAddress] = score;
@@ -264,7 +263,6 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
 
         address[] memory experiencedPool = experiencedPoolTemporary[disputeId];
         address[] memory newbiePool = newbiePoolTemporary[disputeId];
-
 
         // I want to print out the content of experienced pool and newbie pool for testing sake
         // console.log("Experienced Pool Length: ", experiencedPool.length);
@@ -429,19 +427,6 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
             revert JurorManager__NotInVotingPeriod();
         }
 
-        // Get a list of the jurors that are eligble for selection in this stage;
-        // You must not 3+ missed, you must be active (meaning that you should not be part of an ongoing dispute, you must not be part of the jurors for that dispute.)
-        address[] memory eligibleAddresses = _getEligibleJurorAddresses(_disputeId);
-
-        // Selection will be done in this address of jurors;
-        address[] memory newJurors = _pickRandomJurors(eligibleAddresses, numJurors);
-
-        // Add jurors to the candidate list;
-        _addJurorsToCandidateList(_disputeId, newJurors);
-
-        // Extend the time
-        timer.extendDuration = duration;
-
         // Mark the novoters as missed.
         address[] memory selectedJurorAddresses = disputeJurors[_disputeId];
         for (uint256 i = 0; i < selectedJurorAddresses.length; i++) {
@@ -460,6 +445,19 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
                 }
             }
         }
+        // Get a list of the jurors that are eligble for selection in this stage;
+        // You must not 3+ missed, you must be active (meaning that you should not be part of an ongoing dispute, you must not be part of the jurors for that dispute.)
+        address[] memory eligibleAddresses = _getEligibleJurorAddresses(_disputeId);
+        console.log("Eligible addresses length is : ", eligibleAddresses.length);
+
+        // Selection will be done in this address of jurors;
+        address[] memory newJurors = _pickRandomJurors(eligibleAddresses, numJurors);
+
+        // Add jurors to the candidate list;
+        _addJurorsToCandidateList(_disputeId, newJurors);
+
+        // Extend the time
+        timer.extendDuration = duration;
 
         emit JurorAdded(_disputeId, newJurors);
     }
@@ -546,17 +544,39 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
         uint256 index;
 
         for (uint256 i = 0; i < activeJurorAddresses.length; i++) {
+            // console.log("activejurorAddress", i, " is ", activeJurorAddresses[i]);
             address jurorAddress = activeJurorAddresses[i];
-            bool missedVote = isDisputeCandidate[_disputeId][jurorAddress].disputeId == _disputeId
-                && disputeVotes[_disputeId][jurorAddress].support == address(0);
+            bool isAlreadyDisputeJuror = isDisputeCandidate[_disputeId][jurorAddress].disputeId == _disputeId;
+                
+
+            // console.log("_disputeId is", _disputeId);
+            // console.log(
+            //     "isDisputeCAndidate[_disputeId][jurorAddress].disputeId (Already among the jurors)",
+            //     jurorAddress,
+            //     " is ",
+            //     isDisputeCandidate[_disputeId][jurorAddress].disputeId == _disputeId
+            // );
+
+            // console.log(
+            //     "disputeVotes[_disputeId][jurorAddress].support",
+            //     jurorAddress,
+            //     " is ",
+            //     disputeVotes[_disputeId][jurorAddress].support
+            // );
+
+            // console.log("missed vote of ", activeJurorAddresses[i], " is ", missedVote);
+
             bool hasStake = jurors[jurorAddress].stakeAmount >= minStakeAmount;
 
-            if (missedVote || !hasStake) {
+            if (isAlreadyDisputeJuror || !hasStake) {
+                // console.log("Jurror ", jurorAddress, " is not eligible");
                 continue;
             } else {
                 eligibleAddresses[index++] = jurorAddress;
             }
         }
+
+        // console.log("Inside _getEligibleJurorAddresses");
 
         // Shrink the eligibleAddresses size;
         assembly {
@@ -566,7 +586,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
         return eligibleAddresses;
     }
 
-    function adminParticipateInDispute(uint256 _disputeId) external onlyOwner {
+    function adminParticipateInDispute(uint256 _disputeId, address _support) external onlyOwner {
         // @complete - don't forget to remove that missed updater here. It's not supposed to be done here
         // To be called by admins
         // Admin is added as candidate. This will be called only after the voting period has elapsed
@@ -579,12 +599,12 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
         address[] storage selectedJurors = disputeJurors[_disputeId];
 
         // Mark all the jurors that did not vote as missed;
-        for (uint256 i = 0; i < selectedJurors.length; i++) {
-            address jurorAddress = selectedJurors[i];
-            if (disputeVotes[_disputeId][jurorAddress].support == address(0)) {
-                isDisputeCandidate[_disputeId][jurorAddress].missed = true;
-            }
-        }
+        // for (uint256 i = 0; i < selectedJurors.length; i++) {
+        //     address jurorAddress = selectedJurors[i];
+        //     if (disputeVotes[_disputeId][jurorAddress].support == address(0)) {
+        //         isDisputeCandidate[_disputeId][jurorAddress].missed = true;
+        //     }
+        // }
 
         // Add admin as juror
         selectedJurors.push(owner());
@@ -597,7 +617,14 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
             missed: false
         });
 
-        emit AdminParticipatedInDispute(_disputeId);
+          // Then you vote
+          uint256 correspondingDealId = disputes[_disputeId].dealId;
+        Vote memory newVote = Vote(owner(), _disputeId, correspondingDealId, _support);
+
+        disputeVotes[_disputeId][msg.sender] = newVote;
+        allDisputeVotes[_disputeId].push(newVote);
+
+        emit AdminParticipatedInDispute(_disputeId, _support);
     }
 
     function updateMinStakeAmount(uint256 _minStakeAmount) external onlyOwner {
@@ -628,7 +655,6 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
     }
 
     // Getters;
-
     function getDisputeJurors(uint256 _disputeId) external view returns (address[] memory) {
         return disputeJurors[_disputeId];
     }

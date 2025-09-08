@@ -33,6 +33,7 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
     error DisputeManager__AppealTime();
     error DisputeManager__OnlyWinner();
     error DisputeManager__AppealExpired();
+    error DisputeManager__AlreadyFinished();
 
     //////////////////////////
     // EVENTS
@@ -144,7 +145,7 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
     }
 
     function appeal(uint256 _disputeId) external returns (uint256) {
-         uint256[] memory allDisputeAppeals = disputeAppeals[_disputeId];
+        uint256[] memory allDisputeAppeals = disputeAppeals[_disputeId];
 
         // Always make use of the last dispute which would represent the last appeal
         uint256 latestId = allDisputeAppeals.length > 0 ? allDisputeAppeals[allDisputeAppeals.length - 1] : _disputeId;
@@ -164,7 +165,7 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
             revert DisputeManager__NotFinished();
         }
 
-        if (block.timestamp > endTime + appealDuration){
+        if (block.timestamp > endTime + appealDuration) {
             revert DisputeManager__AppealExpired();
         }
 
@@ -218,6 +219,10 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
     function finishDispute(uint256 _disputeId) external onlyOwner {
         // Check if voting time has elapsed;
         Timer memory appealDisputeTimer = disputeTimer[_disputeId];
+
+        if (disputes[_disputeId].winner != address(0)) {
+            revert DisputeManager__AlreadyFinished();
+        }
 
         if (
             block.timestamp
@@ -297,16 +302,20 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
             uint256 currentStakeAmount = currentCandidate.stakeAmount;
             Vote memory currentVote = disputeVotes[_disputeId][currentJurorAddress];
 
-            // console.log("ongoing dispute count of ", currentJurorAddress, " is ", ongoingDisputeCount[currentJurorAddress]);
+            console.log(
+                "ongoing dispute count of ", currentJurorAddress, " is ", ongoingDisputeCount[currentJurorAddress]
+            );
 
-            ongoingDisputeCount[currentJurorAddress] -= 1;
+            if (currentJurorAddress != owner()) {
+                ongoingDisputeCount[currentJurorAddress] -= 1;
+            }
 
             if (currentVote.support != address(0)) {
                 if (currentVote.support != winner) {
                     uint256 amountDeducted = (currentStakeAmount * slashPercentage) / MAX_PERCENT;
                     totalAmountSlashed += amountDeducted;
 
-                    // console.log("amount deducted: ", amountDeducted);
+                    console.log("amount deducted: ", amountDeducted);
 
                     if (currentCandidate.jurorAddress != owner()) {
                         Juror storage juror = jurors[currentJurorAddress];
@@ -317,7 +326,7 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
                         uint256 oldReputation = juror.reputation;
                         int256 newReputation = int256(oldReputation) - (int256(lambda) * int256(k)) / 1e18;
 
-                        // console.log("new reputation: ", newReputation);
+                        console.log("new reputation: ", newReputation);
 
                         juror.reputation = newReputation > 0 ? uint256(newReputation) : 0;
 
@@ -332,17 +341,25 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
             } else {
                 // The candidates here did not vote at all but they were chosen
 
-                // console.log("Will it ever enter here");
+                console.log("Will it ever enter here");
 
                 uint256 deductedAmount = currentStakeAmount * noVoteSlashPercentage / MAX_PERCENT;
                 Juror storage juror = jurors[currentJurorAddress];
                 juror.stakeAmount -= deductedAmount;
 
+                console.log("deductedAmount: ", deductedAmount);
+                console.log("juror.stakeAmount: ", juror.stakeAmount);
+
                 // Update the juror reputation;
                 uint256 oldReputation = juror.reputation;
                 int256 newReputation = int256(oldReputation) - (int256(lambda) * int256(noVoteK)) / 1e18;
 
+                console.log("New reputation: ", newReputation);
+
                 juror.reputation = newReputation > 0 ? uint256(newReputation) : 0;
+
+                console.log("Juror reputation: ", juror.reputation);
+
                 Candidate storage candidate = isDisputeCandidate[_disputeId][currentJurorAddress];
 
                 // Set to missed if it is not set yet.
@@ -359,6 +376,7 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
 
         // Let's distribute to the winners;
         for (uint256 i = 0; i < winnersAlone.length; i++) {
+            console.log("Distributing to winner");
             address currentAddress = winnersAlone[i];
             Candidate memory currentCandidate = isDisputeCandidate[_disputeId][currentAddress];
 
