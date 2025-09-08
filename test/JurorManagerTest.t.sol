@@ -108,6 +108,37 @@ contract JurorManagerTest is BaseJuror {
         return jurorManager.getDisputeVote(_disputeId, _jurorAddress);
     }
 
+    function _voteFlow(uint256 disputeId, address[] memory jurors, address[] memory votes) internal {
+        // votes[i] is the party the juror votes for
+        for (uint256 i = 0; i < jurors.length; i++) {
+            _vote(disputeId, jurors[i], votes[i]);
+        }
+        // fast forward and finish
+        console.log("In _voteFlow, block.timestamp is ", block.timestamp);
+        console.log("In _voteFlow, jurorManager.votingPeriod() is ", jurorManager.votingPeriod());
+
+        vm.warp(block.timestamp + jurorManager.votingPeriod());
+        vm.startPrank(jurorManager.owner());
+        jurorManager.finishDispute(disputeId);
+        vm.stopPrank();
+    }
+
+    function _appealFlow(uint256 parentDisputeId, address loser, IERC20Mock token, uint256 amount, uint256 round)
+        internal
+        returns (uint256 appealId)
+    {
+        uint256 appealFee = feeController.calculateAppealFee(address(token), amount, round);
+
+        // fund loser
+        vm.prank(address(helperConfig));
+        token.mint(loser, appealFee);
+
+        vm.startPrank(loser);
+        token.approve(address(jurorManager), appealFee);
+        appealId = jurorManager.appeal(parentDisputeId);
+        vm.stopPrank();
+    }
+
     function _assertVote(
         JurorManager.Vote memory vote,
         address _jurorAddress,
@@ -604,188 +635,80 @@ contract JurorManagerTest is BaseJuror {
         _registerJuror(makeAddr("juror3"), 6000e18);
         _registerJuror(makeAddr("juror4"), 8000e18);
         _registerJuror(makeAddr("juror5"), 1500e18);
-        _registerJuror(makeAddr("juror6"), 9000e18);
+        _registerJuror(makeAddr("juror6"), 11000e18);
+        _registerJuror(makeAddr("juror7"), 1000e18);
+        _registerJuror(makeAddr("juror8"), 4300e18);
+        _registerJuror(makeAddr("juror9"), 14000e18);
+        _registerJuror(makeAddr("juror10"), 765000e18);
 
-        // Select Jurors
-        uint256 expNeeded = 2;
-        uint256 newbieNeeded = 1;
-        _selectJurors(disputeId, expNeeded, newbieNeeded);
+        // Select jurors
+        _selectJurors(disputeId, 2, 1); // 2 = expNeeded, 1 = newbieNeeded
+        address[] memory jurors1 = jurorManager.getDisputeJurors(disputeId);
+        address[] memory votes1 = new address[](jurors1.length);
+        votes1[0] = sender;
+        votes1[1] = receiver;
+        votes1[2] = sender;
+        _voteFlow(disputeId, jurors1, votes1);
 
-        // Get all the jurors assigned to disputeId;
-        address[] memory disputeJurors = jurorManager.getDisputeJurors(disputeId);
+        // vm.warp(block.timestamp + jurorManager.appealDuration());
 
-        // Get the dispute itself;
-        JurorManager.Dispute memory dispute = jurorManager.getDispute(disputeId);
+        // First appeal
+        uint256 appealId1 = _appealFlow(disputeId, receiver, IERC20Mock(daiTokenAddress), deal.amount, 2);
 
-        // Juros can vote;
-        address disputeJuror1 = disputeJurors[0];
-        address disputeJuror2 = disputeJurors[1];
-        address disputeJuror3 = disputeJurors[2];
-
-        _vote(disputeId, disputeJuror1, dispute.sender);
-        _vote(disputeId, disputeJuror2, dispute.receiver);
-        _vote(disputeId, disputeJuror3, dispute.sender);
-
-        // Fast forward time;
-        vm.warp(block.timestamp + 48 hours);
-
-        // Finish dispute;
-        vm.startPrank(jurorManager.owner());
-        jurorManager.finishDispute(disputeId);
-        vm.stopPrank();
-
-        // Fast forward to after appeal period;
-        vm.warp(block.timestamp + jurorManager.appealDuration());
-
-        // Loser appealing
-        uint256 firstRound = 2;
-        uint256 appealFee = feeController.calculateAppealFee(deal.tokenAddress, deal.amount, firstRound);
-
-        IERC20Mock token = IERC20Mock(deal.tokenAddress);
-
-        // Mint to the loser
-        vm.prank(address(helperConfig));
-        token.mint(dispute.receiver, appealFee);
-
-        // Then the loser seeks for appeal;
-        vm.startPrank(dispute.receiver);
-        token.approve(address(jurorManager), appealFee);
-
-        // Loser should not be able to make appeal because appeal period has passed;
-        uint256 appealId = jurorManager.appeal(disputeId);
-        vm.stopPrank();
-
-        // Now, we repeat everything again.
-        // Select Jurors
-        uint256 expNeeded2 = 3;
-        uint256 newbieNeeded2 = 2;
-        _selectJurors(appealId, expNeeded2, newbieNeeded2);
-
-        // Get all the jurors assigned to disputeId;
-        address[] memory disputeJurors2 = jurorManager.getDisputeJurors(appealId);
-
-        // Get the appeal dispute itself;
-        // Get corresponding disputeId for the appeal
-        // uint256 correspondingDisputeId = jurorManager.appealToDispute(appealId);
-        JurorManager.Dispute memory appealDispute = jurorManager.getDispute(appealId);
-
-        // Juros can vote;
-        address appealDisputeJuror1 = disputeJurors2[0];
-        address appealDisputeJuror2 = disputeJurors2[1];
-        address appealDisputeJuror3 = disputeJurors2[2];
-        address appealDisputeJuror4 = disputeJurors2[3];
-        address appealDisputeJuror5 = disputeJurors2[4];
-
-        _vote(appealId, appealDisputeJuror1, appealDispute.sender);
-        _vote(appealId, appealDisputeJuror2, appealDispute.receiver);
-        _vote(appealId, appealDisputeJuror3, appealDispute.sender);
-        _vote(appealId, appealDisputeJuror4, appealDispute.sender);
-        _vote(appealId, appealDisputeJuror5, appealDispute.sender);
-
-        // Fast forward time;
-        vm.warp(block.timestamp + 48 hours);
-
-        // Finish dispute;
-        vm.startPrank(jurorManager.owner());
-        jurorManager.finishDispute(appealId);
-        vm.stopPrank();
-
-
-        // Loser appealing for the second time;
-        // Loser appealing
-        uint256 secondRound = 3;
-        uint256 secondAppealFee = feeController.calculateAppealFee(deal.tokenAddress, deal.amount, secondRound);
-
-        // Mint to the loser
-        vm.prank(address(helperConfig));
-        token.mint(dispute.receiver, secondAppealFee);
-
-        // Then the loser seeks for appeal;
-        vm.startPrank(dispute.receiver);
-        token.approve(address(jurorManager), secondAppealFee);
-
-        // Loser should not be able to make appeal because appeal period has passed;
-        uint256 secondAppealId = jurorManager.appeal(disputeId);
-        vm.stopPrank();
+        _selectJurors(appealId1, 3, 2); // 3 = expNeeded, 2 = newbieNeeded
+        address[] memory jurors2 = jurorManager.getDisputeJurors(appealId1);
+        address[] memory votes2 = new address[](jurors2.length);
+        votes2[0] = sender;
+        votes2[1] = receiver;
+        votes2[2] = sender;
+        votes2[3] = sender;
+        votes2[4] = sender;
+        _voteFlow(appealId1, jurors2, votes2);
 
         // Fast forward to after appeal period;
-        vm.warp(block.timestamp + jurorManager.appealDuration());
+        // vm.warp(block.timestamp + jurorManager.appealDuration());
 
-        // Now, we repeat everything again.
-        // Select Jurors
-        uint256 expNeeded3 = 3;
-        uint256 newbieNeeded3 = 2;
-        _selectJurors(secondAppealId, expNeeded3, newbieNeeded3);
+        // Second appeal
+        uint256 appealId2 = _appealFlow(disputeId, receiver, IERC20Mock(daiTokenAddress), deal.amount, 3);
 
-        // Get all the jurors assigned to disputeId;
-        address[] memory disputeJurors3 = jurorManager.getDisputeJurors(secondAppealId);
+        _selectJurors(appealId2, 5, 2); // 5 = expNeeded, 2 = newbieNeeded
+        address[] memory jurors3 = jurorManager.getDisputeJurors(appealId2);
+        address[] memory votes3 = new address[](jurors3.length);
+        votes3[0] = receiver;
+        votes3[1] = sender;
+        votes3[2] = receiver;
+        votes3[3] = receiver;
+        votes3[4] = receiver;
+        _voteFlow(appealId2, jurors3, votes3);
 
-        // Get the appeal dispute itself;
-        // Get corresponding disputeId for the appeal
-        // uint256 correspondingDisputeId = jurorManager.appealToDispute(secondAppealId);
-        JurorManager.Dispute memory appeal2Dispute = jurorManager.getDispute(secondAppealId);
+        // Third appeal should revert
+        vm.prank(address(helperConfig));
+        IERC20Mock(daiTokenAddress).mint(sender, 7000e18);
 
-        // Juros can vote;
-        address appeal2DisputeJuror1 = disputeJurors3[0];
-        address appeal2DisputeJuror2 = disputeJurors3[1];
-        address appeal2DisputeJuror3 = disputeJurors3[2];
-        address appeal2DisputeJuror4 = disputeJurors3[3];
-        address appeal2DisputeJuror5 = disputeJurors3[4];
-
-        _vote(secondAppealId, appeal2DisputeJuror1, appeal2Dispute.receiver);
-        _vote(secondAppealId, appeal2DisputeJuror2, appeal2Dispute.sender);
-        _vote(secondAppealId, appeal2DisputeJuror3, appeal2Dispute.receiver);
-        _vote(secondAppealId, appeal2DisputeJuror4, appeal2Dispute.receiver);
-        _vote(secondAppealId, appeal2DisputeJuror5, appeal2Dispute.receiver);
-
-        // Fast forward time;
-        vm.warp(block.timestamp + 48 hours);
-
-        // Finish dispute;
-        vm.startPrank(jurorManager.owner());
-        jurorManager.finishDispute(secondAppealId);
-        vm.stopPrank();
-
-        // Then the last winner withdraws;
-        // Trying to relase funds before the appeal period;
-
-      
-
-    
-        // Trying to create the third appeal. This is expected to fail;
-        token.mint(dispute.sender, 7000e18);
-        vm.startPrank(dispute.sender);
-        token.approve(address(jurorManager), 60000e18);
-
+        vm.startPrank(sender);
+        IERC20Mock(daiTokenAddress).approve(address(jurorManager), 60000e18);
         vm.expectRevert(abi.encodeWithSelector(DisputeManager.DisputeManager__MaxAppealExceeded.selector));
-
         jurorManager.appeal(disputeId);
         vm.stopPrank();
 
-          // Fast forward to after appeal period;
+        // Winner claims funds
         vm.warp(block.timestamp + jurorManager.appealDuration());
 
+        JurorManager.Dispute memory finalDispute = jurorManager.getDispute(appealId2);
+        uint256 balBefore = IERC20Mock(daiTokenAddress).balanceOf(finalDispute.receiver);
 
-          // Loser cannot call releaseFundsToWinner
-        vm.startPrank(appeal2Dispute.sender);
-        vm.expectRevert(abi.encodeWithSelector(DisputeManager.DisputeManager__OnlyWinner.selector));
-        jurorManager.releaseFundsToWinner(secondAppealId);
+        vm.startPrank(finalDispute.receiver);
+        jurorManager.releaseFundsToWinner(appealId2);
         vm.stopPrank();
 
-        // Check the balance of the winner before funds is released;
-        uint256 finalWinnerTokenBalanceBefore = token.balanceOf(appeal2Dispute.receiver);
-
-        // Release funds to winner
-        vm.startPrank(appeal2Dispute.receiver);
-        jurorManager.releaseFundsToWinner(secondAppealId);
-        vm.stopPrank();
-
-        uint256 finalWinnerTokenBalanceAfter = token.balanceOf(appeal2Dispute.receiver);
-
-        assertEq(finalWinnerTokenBalanceAfter, finalWinnerTokenBalanceBefore + deal.amount);
+        uint256 balAfter = IERC20Mock(daiTokenAddress).balanceOf(finalDispute.receiver);
+        assertEq(balAfter, balBefore + deal.amount);
     }
 
-    // function test
+    
+    function testCanPenalizeIfVoteMissed() external {
+        // Here, we have a dispute, 
+    }
 
     function _registerJuror(address jurorAddress, uint256 stakeAmount) internal returns (address) {
         // Mint to the juror;

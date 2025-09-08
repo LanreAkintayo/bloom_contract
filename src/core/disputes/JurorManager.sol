@@ -19,6 +19,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
     mapping(uint256 => uint256) private newbieNeededByDispute;
     mapping(uint256 => uint256) private requestIdToDispute;
     mapping(uint256 => mapping(address => uint256)) private selectionScoresTemp;
+    
 
     /*//////////////////////////////////////////////////////////////
                                 ERRORS
@@ -244,6 +245,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
         lastRequestId = requestId;
         emit RequestSent(requestId, numWords);
         requestIdToDispute[requestId] = disputeId;
+
         return requestId;
     }
 
@@ -310,7 +312,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
             }
 
             rand = uint256(keccak256(abi.encodePacked(rand, i)));
-            console.log("Random: ", rand);
+            // console.log("Random: ", rand);
         }
 
         // pick newbie jurors
@@ -361,7 +363,11 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
         //     // console.log("Selected jurors: ", selected[i], "with selection score : ", selectionScoresTemp[disputeId][selected[i]]);
         // }
 
+        // console.log("In fulfill randomw words, block.timestamp is ", block.timestamp);
+        // console.log("In fulfill randomw words, startTime is ", _startTime);
+
         disputeJurors[disputeId] = selected;
+
         disputeTimer[disputeId] = Timer(disputeId, block.timestamp, votingPeriod, 0);
 
         emit JurorsSelected(disputeId, selected);

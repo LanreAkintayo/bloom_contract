@@ -32,6 +32,7 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
     error DisputeManager__NotInitiator();
     error DisputeManager__AppealTime();
     error DisputeManager__OnlyWinner();
+    error DisputeManager__AppealExpired();
 
     //////////////////////////
     // EVENTS
@@ -143,6 +144,11 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
     }
 
     function appeal(uint256 _disputeId) external returns (uint256) {
+         uint256[] memory allDisputeAppeals = disputeAppeals[_disputeId];
+
+        // Always make use of the last dispute which would represent the last appeal
+        uint256 latestId = allDisputeAppeals.length > 0 ? allDisputeAppeals[allDisputeAppeals.length - 1] : _disputeId;
+
         Dispute memory disputeToAppeal = disputes[_disputeId];
         uint256 dealId = disputeToAppeal.dealId;
         TypesLib.Deal memory deal = bloomEscrow.getDeal(dealId);
@@ -151,13 +157,15 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
         appealCounts[_disputeId] += 1;
 
         // You have to ensure that the dispute has ended;
-        Timer memory appealDisputeTimer = disputeTimer[_disputeId];
-        if (
-            block.timestamp
-                < appealDisputeTimer.startTime + appealDisputeTimer.standardVotingDuration
-                    + appealDisputeTimer.extendDuration
-        ) {
+        Timer memory appealDisputeTimer = disputeTimer[latestId];
+        uint256 endTime =
+            appealDisputeTimer.startTime + appealDisputeTimer.standardVotingDuration + appealDisputeTimer.extendDuration;
+        if (block.timestamp < endTime) {
             revert DisputeManager__NotFinished();
+        }
+
+        if (block.timestamp > endTime + appealDuration){
+            revert DisputeManager__AppealExpired();
         }
 
         // Make sure that this dispute has not gotten to the maximum appeal allowed
@@ -195,7 +203,6 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
             winner: address(0)
         });
 
-        
         disputes[disputeId] = dispute;
 
         // Link the dispute Id to the appeal
@@ -225,11 +232,11 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
         (bool tie, address winner, address loser, uint256 winnerCount, uint256 loserCount) =
             _determineWinner(_disputeId, allVotes);
 
-            // console.log("Tie: ", tie);
-            // console.log("Winner: ", winner);
-            // console.log("Loser: ", loser);
-            // console.log("Winner Count: ", winnerCount);
-            // console.log("Loser Count: ", loserCount);
+        // console.log("Tie: ", tie);
+        // console.log("Winner: ", winner);
+        // console.log("Loser: ", loser);
+        // console.log("Winner Count: ", winnerCount);
+        // console.log("Loser Count: ", loserCount);
 
         // Update the reward and reputation accordingly
         _distributeRewardAndReputation(tie, _disputeId, winner, winnerCount);
