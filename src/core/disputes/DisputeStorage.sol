@@ -89,7 +89,7 @@ abstract contract DisputeStorage {
 
     // Disputes and evidences
     uint256 public disputeId;
-    uint256 public constant MAX_PERCENT  = 10_000; // This represents 100%
+    uint256 public constant MAX_PERCENT = 10_000; // This represents 100%
     mapping(uint256 dealId => uint256 disputeId) public dealToDispute;
     mapping(uint256 disputeId => Dispute) public disputes;
 
@@ -104,13 +104,14 @@ abstract contract DisputeStorage {
     mapping(address jurorAddress => uint256) public ongoingDisputeCount;
     address[] public activeJurorAddresses;
     mapping(address jurorAddrres => uint256 index) public jurorAddressIndex;
+    mapping(address jurorAddress => mapping(uint256 => uint256)) public jurorDisputePayments;
 
     // Candidates and voting
     uint256 public appealThreshold = 3;
     uint256 public missedVoteThreshold = 3;
     uint256 public ongoingDisputeThreshold = 3;
-    uint256 public lambda = 0.2e18;  // Smoothing factor between 0 and 1 scaled by 1e18
-    uint256 public k = 5;  // Step size 
+    uint256 public lambda = 0.2e18; // Smoothing factor between 0 and 1 scaled by 1e18
+    uint256 public k = 5; // Step size
     uint256 public noVoteK = 8; // Step size for not failing to vote
     uint256 public votingPeriod = 48 hours;
     mapping(uint256 disputeId => address[] jurorAddresses) public disputeJurors;
@@ -118,14 +119,12 @@ abstract contract DisputeStorage {
     mapping(uint256 disputeId => Timer) public disputeTimer;
     mapping(uint256 disputeId => mapping(address jurorAddress => Vote)) public disputeVotes;
     mapping(uint256 disputeId => Vote[]) public allDisputeVotes;
-    
-    
+
     // Appeals
     mapping(uint256 disputeId => uint256[] appeals) public disputeAppeals;
     mapping(uint256 disputeId => uint256) public appealCounts;
     uint256 public appealDuration = 24 hours;
     mapping(uint256 appealId => uint256 disputeId) public appealToDispute;
-
 
     // Staking rules
     uint256 public minStakeAmount = 1000e18;
@@ -143,6 +142,4 @@ abstract contract DisputeStorage {
 
     uint256[] public requestIds;
     uint256 public lastRequestId;
-
-
 }
