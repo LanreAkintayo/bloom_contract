@@ -20,21 +20,27 @@ contract DeployAll is Script {
     function run() external {
         // 1. Deploy Bloom
         DeployBloom deployBloom = new DeployBloom();
-        (Bloom bloom, ) = deployBloom.run();
+        (Bloom bloom,) = deployBloom.run();
 
         // 2. Deploy FeeController
-         DeployFeeController deployFeeController = new DeployFeeController();
+        DeployFeeController deployFeeController = new DeployFeeController();
         (FeeController feeController, HelperConfig helperConfig) = deployFeeController.run();
         networkConfig = helperConfig.getConfigByChainId(block.chainid);
 
         // 3. Deploy BloomEscrow
-         DeployBloomEscrow deployBloomEscrow = new DeployBloomEscrow();
-        (BloomEscrow bloomEscrow, ) = deployBloomEscrow.run();
+        DeployBloomEscrow deployBloomEscrow = new DeployBloomEscrow();
+        (BloomEscrow bloomEscrow,) = deployBloomEscrow.run();
 
         // 4. Deploy JurorManager (requires addresses of others)
         DeployJurorManager deployJurorManager = new DeployJurorManager();
-        (JurorManager jurorManager, ) = deployJurorManager.run(address(bloom), networkConfig.linkAddress, networkConfig.wrapperAddress,  address(bloomEscrow), address(feeController) );
-        
+        (JurorManager jurorManager,) = deployJurorManager.run(
+            address(bloom),
+            networkConfig.linkAddress,
+            networkConfig.wrapperAddress,
+            address(bloomEscrow),
+            address(feeController),
+            networkConfig.wrappedNativeTokenAddress
+        );
 
         console2.log("Bloom deployed at:", address(bloom));
         console2.log("FeeController deployed at:", address(feeController));

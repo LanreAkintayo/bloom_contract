@@ -65,8 +65,9 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
         address _linkAddress,
         address _wrapperAddress,
         address _escrowAddress,
-        address _feeControllerAddress
-    ) VRFV2WrapperConsumerBase(_linkAddress, _wrapperAddress) DisputeManager(_escrowAddress, _feeControllerAddress) {
+        address _feeControllerAddress,
+        address _wrappedNativeTokenAddress
+    ) VRFV2WrapperConsumerBase(_linkAddress, _wrapperAddress) DisputeManager(_escrowAddress, _feeControllerAddress, _wrappedNativeTokenAddress) {
         bloomToken = IERC20(_bloomTokenAddress);
         linkAddress = _linkAddress;
         wrapperAddress = _wrapperAddress;
@@ -143,16 +144,16 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
         return score;
     }
 
-    /**
-     * @notice Selects jurors for a given dispute based on experience and fairness constraints.
-     * @param disputeId The ID of the dispute for which jurors are being selected.
-     * @param thresholdFP The minimum threshold in fixedPointScale (1e18) to be counted as an experienced juror.
-     * @param alphaFP The weight factor applied to increase the intensity of stake during selection.
-     * @param betaFP The weight factor applied to increase the intensity of reputation during selection.
-     * @param expNeeded The number of experienced jurors required for this dispute.
-     * @param newbieNeeded The number of newbie jurors required for this dispute.
-     * @param experiencedPoolSize The total number of experienced jurors available in the pool based on offchain calculations
-     */
+    // /**
+    //  * @notice Selects jurors for a given dispute based on experience and fairness constraints.
+    //  * @param disputeId The ID of the dispute for which jurors are being selected.
+    //  * @param thresholdFP The minimum threshold in fixedPointScale (1e18) to be counted as an experienced juror.
+    //  * @param alphaFP The weight factor applied to increase the intensity of stake during selection.
+    //  * @param betaFP The weight factor applied to increase the intensity of reputation during selection.
+    //  * @param expNeeded The number of experienced jurors required for this dispute.
+    //  * @param newbieNeeded The number of newbie jurors required for this dispute.
+    //  * @param experiencedPoolSize The total number of experienced jurors available in the pool based on offchain calculations
+    //  */
     function selectJurors(
         uint256 disputeId,
         uint256 thresholdFP,
@@ -253,122 +254,123 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
         // console.log("Request ID in the contract:", _requestId);
         // console.log("Random words:", _randomWords[0]);
 
-        if (s_requests[_requestId].paid <= 0) {
-            revert JurorManager__RequestNotFound();
-        }
-        s_requests[_requestId].fulfilled = true;
+        // if (s_requests[_requestId].paid <= 0) {
+        //     revert JurorManager__RequestNotFound();
+        // }
+        // s_requests[_requestId].fulfilled = true;
 
-        uint256 randomness = _randomWords[0];
-        uint256 disputeId = requestIdToDispute[_requestId];
+        // uint256 randomness = _randomWords[0];
+        // uint256 disputeId = requestIdToDispute[_requestId];
 
-        address[] memory experiencedPool = experiencedPoolTemporary[disputeId];
-        address[] memory newbiePool = newbiePoolTemporary[disputeId];
+        // address[] memory experiencedPool = experiencedPoolTemporary[disputeId];
+        // address[] memory newbiePool = newbiePoolTemporary[disputeId];
 
-        // I want to print out the content of experienced pool and newbie pool for testing sake
-        // console.log("Experienced Pool Length: ", experiencedPool.length);
-        for (uint256 i = 0; i < experiencedPool.length; i++) {
-            // console.log("experienced pool address: ", experiencedPool[i], "with selection score : ", selectionScoresTemp[disputeId][experiencedPool[i]]);
-        }
-
-        // console.log("Newbie Pool Length: ", newbiePool.length);
-        for (uint256 i = 0; i < newbiePool.length; i++) {
-            // console.log("newbie pool address: ", newbiePool[i], "with selection score : ", selectionScoresTemp[disputeId][newbiePool[i]]);
-        }
-
-        uint256 expNeeded = experienceNeededByDispute[disputeId];
-        uint256 newbieNeeded = newbieNeededByDispute[disputeId];
-        uint256 total = expNeeded + newbieNeeded;
-
-        address[] memory selected = new address[](total);
-        uint256 idx = 0;
-        uint256 rand = randomness;
-
-        // pick experienced jurors
-        for (uint256 i = 0; i < expNeeded; i++) {
-            uint256 pickIdx = rand % experiencedPool.length;
-            address selectedJurorAddress = experiencedPool[pickIdx];
-            Juror memory correspondingJuror = jurors[selectedJurorAddress];
-            selected[idx++] = selectedJurorAddress;
-
-            // Update the candidate mapping;
-            isDisputeCandidate[disputeId][selectedJurorAddress] = Candidate(
-                disputeId,
-                selectedJurorAddress,
-                correspondingJuror.stakeAmount,
-                correspondingJuror.reputation,
-                selectionScoresTemp[disputeId][selectedJurorAddress],
-                false
-            );
-
-            // Track all the disputes per juror
-            jurorDisputeHistory[selectedJurorAddress].push(disputeId);
-
-            // swap-remove
-            experiencedPool[pickIdx] = experiencedPool[experiencedPool.length - 1];
-            assembly {
-                mstore(experiencedPool, sub(mload(experiencedPool), 1))
-            }
-
-            rand = uint256(keccak256(abi.encodePacked(rand, i)));
-            // console.log("Random: ", rand);
-        }
-
-        // pick newbie jurors
-        for (uint256 i = 0; i < newbieNeeded; i++) {
-            uint256 pickIdx = rand % newbiePool.length;
-            address selectedJurorAddress = newbiePool[pickIdx];
-            Juror memory correspondingJuror = jurors[selectedJurorAddress];
-            selected[idx++] = selectedJurorAddress;
-
-            // Update the candidate mapping;
-            isDisputeCandidate[disputeId][selectedJurorAddress] = Candidate(
-                disputeId,
-                selectedJurorAddress,
-                correspondingJuror.stakeAmount,
-                correspondingJuror.reputation,
-                selectionScoresTemp[disputeId][selectedJurorAddress],
-                false
-            );
-
-            // Track all the disputes per juror
-            jurorDisputeHistory[selectedJurorAddress].push(disputeId);
-
-            // swap-remove
-            newbiePool[pickIdx] = newbiePool[newbiePool.length - 1];
-            assembly {
-                mstore(newbiePool, sub(mload(newbiePool), 1))
-            }
-
-            rand = uint256(keccak256(abi.encodePacked(rand, i)));
-        }
-
-        // mark jurors active
-        for (uint256 i = 0; i < selected.length; i++) {
-            address selectedAddress = selected[i];
-
-            ongoingDisputeCount[selectedAddress] += 1;
-
-            bool isPresent = isInActiveJurorAddresses(selectedAddress);
-            if (ongoingDisputeCount[selectedAddress] > ongoingDisputeThreshold && isPresent) {
-                _popFromActiveJurorAddresses(selectedAddress);
-            }
-        }
-
-        // As per they are active here, let me remove from them from the available jurors.
-
-        // I want to print the list of all the selected jurors;
-        // for (uint256 i = 0; i < selected.length; i++) {
-        //     // console.log("Selected jurors: ", selected[i], "with selection score : ", selectionScoresTemp[disputeId][selected[i]]);
+        // // I want to print out the content of experienced pool and newbie pool for testing sake
+        // // console.log("Experienced Pool Length: ", experiencedPool.length);
+        // for (uint256 i = 0; i < experiencedPool.length; i++) {
+        //     // console.log("experienced pool address: ", experiencedPool[i], "with selection score : ", selectionScoresTemp[disputeId][experiencedPool[i]]);
         // }
 
-        // console.log("In fulfill randomw words, block.timestamp is ", block.timestamp);
-        // console.log("In fulfill randomw words, startTime is ", _startTime);
+        // // console.log("Newbie Pool Length: ", newbiePool.length);
+        // for (uint256 i = 0; i < newbiePool.length; i++) {
+        //     // console.log("newbie pool address: ", newbiePool[i], "with selection score : ", selectionScoresTemp[disputeId][newbiePool[i]]);
+        // }
 
-        disputeJurors[disputeId] = selected;
+        // uint256 expNeeded = experienceNeededByDispute[disputeId];
+        // uint256 newbieNeeded = newbieNeededByDispute[disputeId];
+        // uint256 total = expNeeded + newbieNeeded;
 
-        disputeTimer[disputeId] = Timer(disputeId, block.timestamp, votingPeriod, 0);
+        // address[] memory selected = new address[](total);
+        // uint256 idx = 0;
+        // uint256 rand = randomness;
 
-        emit JurorsSelected(disputeId, selected);
+        // // pick experienced jurors
+        // for (uint256 i = 0; i < expNeeded; i++) {
+        //     uint256 pickIdx = rand % experiencedPool.length;
+        //     address selectedJurorAddress = experiencedPool[pickIdx];
+        //     Juror memory correspondingJuror = jurors[selectedJurorAddress];
+        //     selected[idx++] = selectedJurorAddress;
+
+        //     // Update the candidate mapping;
+        //     isDisputeCandidate[disputeId][selectedJurorAddress] = Candidate(
+        //         disputeId,
+        //         selectedJurorAddress,
+        //         correspondingJuror.stakeAmount,
+        //         correspondingJuror.reputation,
+        //         selectionScoresTemp[disputeId][selectedJurorAddress],
+        //         false
+        //     );
+
+        //     // Track all the disputes per juror
+        //     jurorDisputeHistory[selectedJurorAddress].push(disputeId);
+
+        //     // swap-remove
+        //     experiencedPool[pickIdx] = experiencedPool[experiencedPool.length - 1];
+        //     assembly {
+        //         mstore(experiencedPool, sub(mload(experiencedPool), 1))
+        //     }
+
+        //     rand = uint256(keccak256(abi.encodePacked(rand, i)));
+        //     // console.log("Random: ", rand);
+        // }
+
+        // // pick newbie jurors
+        // for (uint256 i = 0; i < newbieNeeded; i++) {
+        //     uint256 pickIdx = rand % newbiePool.length;
+        //     address selectedJurorAddress = newbiePool[pickIdx];
+        //     Juror memory correspondingJuror = jurors[selectedJurorAddress];
+        //     selected[idx++] = selectedJurorAddress;
+
+        //     // Update the candidate mapping;
+        //     isDisputeCandidate[disputeId][selectedJurorAddress] = Candidate(
+        //         disputeId,
+        //         selectedJurorAddress,
+        //         correspondingJuror.stakeAmount,
+        //         correspondingJuror.reputation,
+        //         selectionScoresTemp[disputeId][selectedJurorAddress],
+        //         false
+        //     );
+
+        //     // Track all the disputes per juror
+        //     jurorDisputeHistory[selectedJurorAddress].push(disputeId);
+
+        //     // swap-remove
+        //     newbiePool[pickIdx] = newbiePool[newbiePool.length - 1];
+        //     assembly {
+        //         mstore(newbiePool, sub(mload(newbiePool), 1))
+        //     }
+
+        //     rand = uint256(keccak256(abi.encodePacked(rand, i)));
+        // }
+
+        // // mark jurors active
+        // for (uint256 i = 0; i < selected.length; i++) {
+        //     address selectedAddress = selected[i];
+
+        //     ongoingDisputeCount[selectedAddress] += 1;
+
+        //     bool isPresent = isInActiveJurorAddresses(selectedAddress);
+        //     if (ongoingDisputeCount[selectedAddress] > ongoingDisputeThreshold && isPresent) {
+        //         _popFromActiveJurorAddresses(selectedAddress);
+        //     }
+        // }
+
+        // // As per they are active here, let me remove from them from the available jurors.
+
+        // // I want to print the list of all the selected jurors;
+        // // for (uint256 i = 0; i < selected.length; i++) {
+        // //     // console.log("Selected jurors: ", selected[i], "with selection score : ", selectionScoresTemp[disputeId][selected[i]]);
+        // // }
+
+        // // console.log("In fulfill randomw words, block.timestamp is ", block.timestamp);
+        // // console.log("In fulfill randomw words, startTime is ", _startTime);
+
+        // disputeJurors[disputeId] = selected;
+
+        // disputeTimer[disputeId] = Timer(disputeId, block.timestamp, votingPeriod, 0);
+
+        // emit JurorsSelected(disputeId, selected);
+        // emit JurorsSelected(disputeId, address(0));
     }
 
     function vote(uint256 disputeId, address support) external {
@@ -448,7 +450,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
         // Get a list of the jurors that are eligble for selection in this stage;
         // You must not 3+ missed, you must be active (meaning that you should not be part of an ongoing dispute, you must not be part of the jurors for that dispute.)
         address[] memory eligibleAddresses = _getEligibleJurorAddresses(_disputeId);
-        console.log("Eligible addresses length is : ", eligibleAddresses.length);
+        // console.log("Eligible addresses length is : ", eligibleAddresses.length);
 
         // Selection will be done in this address of jurors;
         address[] memory newJurors = _pickRandomJurors(eligibleAddresses, numJurors);

@@ -51,6 +51,7 @@ contract HelperConfig is CodeConstants, Script {
         address linkAddress;
         address wrapperAddress;
         address bloomTokenAddress;
+        address wrappedNativeTokenAddress;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -98,7 +99,8 @@ contract HelperConfig is CodeConstants, Script {
             wethTokenAddress: 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2,
             linkAddress: 0x326C977E6efc84E512bB9C30f76E30c160eD06FB,
             wrapperAddress: 0x326C977E6efc84E512bB9C30f76E30c160eD06FB,
-            bloomTokenAddress: address(0)
+            bloomTokenAddress: address(0),
+            wrappedNativeTokenAddress: address(0)
         });
         return sepoliaConfig;
     }
@@ -113,7 +115,8 @@ contract HelperConfig is CodeConstants, Script {
             wethTokenAddress: address(0),
             linkAddress: address(0),
             wrapperAddress: address(0),
-            bloomTokenAddress: address(0)
+            bloomTokenAddress: address(0),
+            wrappedNativeTokenAddress: address(0)
         });
         return zkSyncSepoliaConfig;
     }
@@ -158,7 +161,8 @@ contract HelperConfig is CodeConstants, Script {
             wethTokenAddress: address(weth),
             linkAddress: address(linkToken),
             wrapperAddress: address(vrfV2Wrapper),
-            bloomTokenAddress: address(bloom)
+            bloomTokenAddress: address(bloom),
+            wrappedNativeTokenAddress: address(weth)
         });
 
         vrfCoordinator = _vrfCoordinator;

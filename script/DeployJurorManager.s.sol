@@ -12,10 +12,11 @@ contract DeployJurorManager is Script {
         address _linkAddress,
         address _wrapperAddress,
         address _escrowAddress,
-        address _feeControllerAddress
+        address _feeControllerAddress,
+        address _wrappedNativeTokenAddress
     ) external returns (JurorManager, HelperConfig) {
         return
-            deployJurorManager(_bloomTokenAddress, _linkAddress, _wrapperAddress, _escrowAddress, _feeControllerAddress);
+            deployJurorManager(_bloomTokenAddress, _linkAddress, _wrapperAddress, _escrowAddress, _feeControllerAddress, _wrappedNativeTokenAddress);
     }
 
     function deployJurorManager(
@@ -23,14 +24,15 @@ contract DeployJurorManager is Script {
         address linkAddress,
         address wrapperAddress,
         address escrowAddress,
-        address feeControllerAddress
+        address feeControllerAddress,
+        address wrappedNativeTokenAddress
     ) internal returns (JurorManager, HelperConfig) {
         // Implementation will sit here
         HelperConfig helperConfig = new HelperConfig();
         
         // Deploy the contracts;
         vm.startBroadcast();
-        JurorManager jurorManager = new JurorManager(bloomTokenAddress, linkAddress, wrapperAddress, escrowAddress, feeControllerAddress);
+        JurorManager jurorManager = new JurorManager(bloomTokenAddress, linkAddress, wrapperAddress, escrowAddress, feeControllerAddress, wrappedNativeTokenAddress);
         vm.stopBroadcast();
 
         return (jurorManager, helperConfig);

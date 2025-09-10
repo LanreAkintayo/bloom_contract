@@ -59,7 +59,8 @@ contract BaseJuror is Test {
             networkConfig.linkAddress,
             networkConfig.wrapperAddress,
             address(bloomEscrow),
-            address(feeController)
+            address(feeController),
+            networkConfig.wrappedNativeTokenAddress
         );
 
         // Link FeeController and dispute manager to BloomEscrow

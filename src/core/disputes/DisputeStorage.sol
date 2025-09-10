@@ -34,11 +34,13 @@ abstract contract DisputeStorage {
     }
 
     struct Dispute {
-        uint256 dealId;
         address initiator;
         address sender;
         address receiver;
         address winner;
+        uint256 dealId;
+        uint256 disputeFee;
+        address feeTokenAddress;
     }
 
     struct Juror {
@@ -78,6 +80,12 @@ abstract contract DisputeStorage {
         uint256 extendDuration;
     }
 
+    struct PaymentType {
+        uint256 disputeId;
+        address tokenAddress;
+        uint256 amount;
+    }
+
     //////////////////////////
     // STATE VARIABLES
     //////////////////////////
@@ -86,6 +94,7 @@ abstract contract DisputeStorage {
     IBloomEscrow public bloomEscrow;
     IFeeController public feeController;
     IERC20 public bloomToken;
+    address public wrappedNative;
 
     // Disputes and evidences
     uint256 public disputeId;
@@ -104,7 +113,13 @@ abstract contract DisputeStorage {
     mapping(address jurorAddress => uint256) public ongoingDisputeCount;
     address[] public activeJurorAddresses;
     mapping(address jurorAddrres => uint256 index) public jurorAddressIndex;
-    mapping(address jurorAddress => mapping(uint256 => uint256)) public jurorDisputePayments;
+    // mapping(address jurorAddress => mapping(address tokenAddress => uint256)) public jurorTokenPayments;
+    // mapping(address jurorAddress => mapping(address tokenAddress => uint256)) public jurorTokenPaymentsClaimed;
+    // mapping(uint256 disputeId => mapping(address jurorAddress => PaymentType)) public disputeToJurorPayment;
+
+    // mapping(uint256 disputeId => mapping(address tokenAddress => uint256)) public residuePayments;
+    // mapping(uint256 disputeId => mapping(address tokenAddress => uint256)) public residuePaymentsClaimed;
+    // mapping(address tokenAddress => uint256) public totalResidue;
 
     // Candidates and voting
     uint256 public appealThreshold = 3;
@@ -132,6 +147,7 @@ abstract contract DisputeStorage {
     uint256 public slashPercentage = 1000; // 10% by default
     uint256 public noVoteSlashPercentage = 2000; // 20% by default
     uint256 public maxSlashPercentage = 5000; // 50% at most.
+    uint256 public basePercentage = 1000; // 10% of the base fee to be distributed to all participants.
 
     // Chainlink VRF
     uint32 public callbackGasLimit = 1_600_000;

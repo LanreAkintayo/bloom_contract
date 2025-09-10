@@ -34,6 +34,8 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
     error DisputeManager__OnlyWinner();
     error DisputeManager__AppealExpired();
     error DisputeManager__AlreadyFinished();
+    error DisputeManager__NoReward();
+    error DisputeManager__NotEnoughReward();
 
     //////////////////////////
     // EVENTS
@@ -52,14 +54,18 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
     event DisputeClosed(uint256 indexed _disputeId, address indexed initiator);
     event DisputeFinished(uint256 _disputeId, address winner, address loser, uint256 winnerCount, uint256 loserCount);
     event FundsReleasedToWinner(uint256 _disputeId, address winner);
+    event RewardClaimed(address jurorAddress, address tokenAddress, uint256 amount);
 
     //////////////////////////
     // CONSTRUCTOR
     //////////////////////////
 
-    constructor(address escrowAddress, address feeControllerAddress) ConfirmedOwner(msg.sender) {
+    constructor(address escrowAddress, address feeControllerAddress, address wrappedNativeTokenAddress)
+        ConfirmedOwner(msg.sender)
+    {
         bloomEscrow = IBloomEscrow(escrowAddress);
         feeController = IFeeController(feeControllerAddress);
+        wrappedNative = wrappedNativeTokenAddress;
     }
 
     //////////////////////////
@@ -85,21 +91,6 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
             revert DisputeManager__CannotDispute();
         }
 
-        Dispute memory dispute = Dispute({
-            dealId: dealId,
-            initiator: msg.sender,
-            sender: deal.sender,
-            receiver: deal.receiver,
-            winner: address(0)
-        });
-
-        disputeId++;
-        disputes[disputeId] = dispute;
-
-        if (dealToDispute[dealId] == 0) {
-            dealToDispute[dealId] = disputeId;
-        }
-
         // Charge dispute fee (if any) - omitted for simplicity
         uint256 disputeFee = 0;
 
@@ -109,7 +100,7 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
 
         // Transfer dispute fee to the contract;
         // Dispute fee is the same as the token used to create deal.
-        if (deal.tokenAddress != address(0)) {
+        if (deal.tokenAddress != wrappedNative) {
             IERC20 token = IERC20(deal.tokenAddress);
             token.safeTransferFrom(msg.sender, address(this), disputeFee);
         } else {
@@ -117,6 +108,24 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
             if (!native_success) {
                 revert DisputeManager__TransferFailed();
             }
+        }
+
+        disputeId++;
+
+        Dispute memory dispute = Dispute({
+            initiator: msg.sender,
+            sender: deal.sender,
+            receiver: deal.receiver,
+            winner: address(0),
+            dealId: dealId,
+            disputeFee: disputeFee,
+            feeTokenAddress: deal.tokenAddress
+        });
+
+        disputes[disputeId] = dispute;
+
+        if (dealToDispute[dealId] == 0) {
+            dealToDispute[dealId] = disputeId;
         }
 
         // update the deal status to Disputed
@@ -184,7 +193,7 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
 
         // Transfer dispute fee to the contract;
         // Dispute fee is the same as the token used to create deal.
-        if (deal.tokenAddress != address(0)) {
+        if (deal.tokenAddress != wrappedNative) {
             IERC20 token = IERC20(deal.tokenAddress);
             token.safeTransferFrom(msg.sender, address(this), appealFee);
         } else {
@@ -197,11 +206,13 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
         disputeId++;
 
         Dispute memory dispute = Dispute({
-            dealId: dealId,
             initiator: msg.sender,
             sender: deal.sender,
             receiver: deal.receiver,
-            winner: address(0)
+            winner: address(0),
+            dealId: dealId,
+            disputeFee: appealFee,
+            feeTokenAddress: deal.tokenAddress
         });
 
         disputes[disputeId] = dispute;
@@ -293,6 +304,9 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
         address[] memory selectedJurors = disputeJurors[_disputeId];
         address[] memory winnersAlone = new address[](winnerCount);
         uint256 winnerId = 0;
+        uint256 votedJurorCount = 0;
+        Dispute memory currentDispute = disputes[_disputeId];
+        uint256 baseFee = (basePercentage * currentDispute.disputeFee) / MAX_PERCENT;
 
         // Calculate the total amount slashed from the losers
         for (uint256 i = 0; i < selectedJurors.length; i++) {
@@ -311,11 +325,25 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
             }
 
             if (currentVote.support != address(0)) {
+                votedJurorCount++;
+
+                // Share the base fee to all the voted jurors;
+                // jurorTokenPayments[currentJurorAddress][currentDispute.feeTokenAddress] += baseFee;
+
+                // Insider here, they vote either for the winner or for the loser;
+                // uint256 base
                 if (currentVote.support != winner) {
+                    // Update the disputeJurorPayment
+                    // disputeToJurorPayment[_disputeId][currentJurorAddress] = PaymentType({
+                    //     disputeId: _disputeId,
+                    //     tokenAddress: currentDispute.feeTokenAddress,
+                    //     amount: baseFee
+                    // });
+
                     uint256 amountDeducted = (currentStakeAmount * slashPercentage) / MAX_PERCENT;
                     totalAmountSlashed += amountDeducted;
 
-                    console.log("amount deducted: ", amountDeducted);
+                    // console.log("amount deducted: ", amountDeducted);
 
                     if (currentCandidate.jurorAddress != owner()) {
                         Juror storage juror = jurors[currentJurorAddress];
@@ -326,7 +354,7 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
                         uint256 oldReputation = juror.reputation;
                         int256 newReputation = int256(oldReputation) - (int256(lambda) * int256(k)) / 1e18;
 
-                        console.log("new reputation: ", newReputation);
+                        // console.log("new reputation: ", newReputation);
 
                         juror.reputation = newReputation > 0 ? uint256(newReputation) : 0;
 
@@ -341,24 +369,24 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
             } else {
                 // The candidates here did not vote at all but they were chosen
 
-                console.log("Will it ever enter here");
+                // console.log("Will it ever enter here");
 
                 uint256 deductedAmount = currentStakeAmount * noVoteSlashPercentage / MAX_PERCENT;
                 Juror storage juror = jurors[currentJurorAddress];
                 juror.stakeAmount -= deductedAmount;
 
-                console.log("deductedAmount: ", deductedAmount);
-                console.log("juror.stakeAmount: ", juror.stakeAmount);
+                // console.log("deductedAmount: ", deductedAmount);
+                // console.log("juror.stakeAmount: ", juror.stakeAmount);
 
                 // Update the juror reputation;
                 uint256 oldReputation = juror.reputation;
                 int256 newReputation = int256(oldReputation) - (int256(lambda) * int256(noVoteK)) / 1e18;
 
-                console.log("New reputation: ", newReputation);
+                // console.log("New reputation: ", newReputation);
 
                 juror.reputation = newReputation > 0 ? uint256(newReputation) : 0;
 
-                console.log("Juror reputation: ", juror.reputation);
+                // console.log("Juror reputation: ", juror.reputation);
 
                 Candidate storage candidate = isDisputeCandidate[_disputeId][currentJurorAddress];
 
@@ -375,8 +403,14 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
         }
 
         // Let's distribute to the winners;
+        // Update their payments;
+        uint256 remainingPercent = MAX_PERCENT - (basePercentage * votedJurorCount);
+        uint256 remainingFee = remainingPercent * currentDispute.disputeFee / MAX_PERCENT;
+        uint256 individualFee = remainingFee / winnersAlone.length;
+        uint256 accumulatedFee = 0;
+
         for (uint256 i = 0; i < winnersAlone.length; i++) {
-            console.log("Distributing to winner");
+            // console.log("Distributing to winner");
             address currentAddress = winnersAlone[i];
             Candidate memory currentCandidate = isDisputeCandidate[_disputeId][currentAddress];
 
@@ -392,10 +426,28 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
 
             bool isPresent = isInActiveJurorAddresses(currentAddress);
 
+            // // Share the base fee to all the voted jurors;
+            // jurorTokenPayments[currentAddress][currentDispute.feeTokenAddress] += individualFee;
+
+            // // Update the disputeJurorPayment
+            // disputeToJurorPayment[_disputeId][currentAddress] = PaymentType({
+            //     disputeId: _disputeId,
+            //     tokenAddress: currentDispute.feeTokenAddress,
+            //     amount: baseFee + individualFee
+            // });
+
+            accumulatedFee += individualFee;
+
             if (ongoingDisputeCount[currentAddress] <= ongoingDisputeThreshold && !isPresent) {
                 // Push back to the array of activeJurorAddresses
                 _pushToActiveJurorAddresses(currentAddress);
             }
+        }
+
+        if (remainingFee > accumulatedFee) {
+            uint256 residues = remainingFee - accumulatedFee;
+            // residuePayments[_disputeId][currentDispute.feeTokenAddress] += residues;
+            // totalResidue[currentDispute.feeTokenAddress] += residues;
         }
     }
 
@@ -426,6 +478,33 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
         // Relase the funds to the winner
         bloomEscrow.releaseFunds(latestDispute.winner, dealId);
         emit FundsReleasedToWinner(_disputeId, msg.sender);
+    }
+
+    function claimReward(address tokenAddress, uint256 amount) external {
+        // uint256 reward = jurorTokenPayments[msg.sender][tokenAddress];
+        // uint256 rewardClaimed = jurorTokenPaymentsClaimed[msg.sender][tokenAddress];
+        // uint256 amountAvailable = reward - rewardClaimed;
+
+        // if (reward <= 0) {
+        //     revert DisputeManager__NoReward();
+        // }
+
+        // if (amountAvailable < amount) {
+        //     revert DisputeManager__NotEnoughReward();
+        // }
+
+        if (tokenAddress == wrappedNative) {
+            (bool native_success,) = msg.sender.call{value: amount}("");
+            if (!native_success) {
+                revert DisputeManager__TransferFailed();
+            }
+        } else {
+            IERC20(tokenAddress).safeTransfer(msg.sender, amount);
+        }
+
+        // jurorTokenPaymentsClaimed[msg.sender][tokenAddress] += amount;
+
+        emit RewardClaimed(msg.sender, tokenAddress, amount);
     }
 
     /// @notice Adds evidence to a dispute

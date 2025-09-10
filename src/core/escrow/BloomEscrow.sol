@@ -29,6 +29,10 @@ contract BloomEscrow is ReentrancyGuard, EscrowTokens {
     error BloomEscrow__ZeroAddress();
     error BloomEscrow__AlreadyFinalized();
     error BloomEscrow__CannotFinalize();
+    error BloomEscrow__NotFunded();
+    error BloomEscrow__NotSupported();
+    error BloomEscrow__NotEnoughEscrowFee();
+
 
     //////////////////////////
     // EVENTS
@@ -38,15 +42,21 @@ contract BloomEscrow is ReentrancyGuard, EscrowTokens {
         uint256 indexed dealId, address indexed sender, address indexed receiver, uint256 amount, address tokenAddress
     );
     event FundsReleased(address winner, uint256 id);
+    event EscrowFeeClaimed(address owner, address tokenAddress, uint256 amount);
+
 
     //////////////////////////
     // STATE VARIABLES
     //////////////////////////
 
     mapping(uint256 => TypesLib.Deal) public deals;
+    mapping(address => uint256) public tokenToEscrowFee;
+    mapping(address => uint256) public tokenToEscrowFeeClaimed;
+
     uint256 public dealCount;
     address public disputeManagerAddress;
     address public feeControllerAddress;
+    address public wrappedNative;
 
     //////////////////////////
     // MODIFIERS
@@ -64,6 +74,10 @@ contract BloomEscrow is ReentrancyGuard, EscrowTokens {
             revert BloomEscrow__NotReceiver();
         }
         _;
+    }
+
+    constructor(address wrappedNativeTokenAddress) {
+        wrappedNative = wrappedNativeTokenAddress;
     }
 
     //////////////////////////
@@ -93,12 +107,20 @@ contract BloomEscrow is ReentrancyGuard, EscrowTokens {
         nonReentrant
     {
         // Validate parameters
-        if (sender == address(0) || receiver == address(0) || amount == 0) {
+        if (sender == address(0) || receiver == address(0) || amount == 0 || tokenAddress == address(0))  {
             revert BloomEscrow__InvalidParameters();
         }
 
-        if (tokenAddress != address(0) && msg.value > 0 && !isSupported[tokenAddress]) {
-            revert EscrowTokens__NotSupported();
+        // It is either you've approved the token address
+        // or you supply the native token address and msg.value
+        // Anything other than that is not suppored.
+
+        if (!isSupported[tokenAddress]) {
+            revert BloomEscrow__NotSupported();
+        }
+
+        if (tokenAddress == wrappedNative && msg.value <= 0) {
+            revert BloomEscrow__NotFunded();
         }
 
         // Initialize a new deal
@@ -123,6 +145,7 @@ contract BloomEscrow is ReentrancyGuard, EscrowTokens {
         if (feeController.escrowFeePercentage() > 0) {
             uint256 escrowFee = feeController.calculateEscrowFee(amount);
             totalAmount += escrowFee;
+            tokenToEscrowFee[tokenAddress] += escrowFee;
         }
 
         console.log("msg.value: ", msg.value);
@@ -132,7 +155,7 @@ contract BloomEscrow is ReentrancyGuard, EscrowTokens {
         }
 
         // Transfer the funds to escrow
-        if (tokenAddress != address(0)) {
+        if (tokenAddress != wrappedNative) {
             IERC20 token = IERC20(tokenAddress);
             token.safeTransferFrom(sender, address(this), totalAmount);
         }
@@ -177,7 +200,7 @@ contract BloomEscrow is ReentrancyGuard, EscrowTokens {
         uint256 amount = deal.amount;
         address sender = deal.sender;
 
-        if (tokenAddress != address(0)) {
+        if (tokenAddress != wrappedNative) {
             IERC20 token = IERC20(tokenAddress);
             token.safeTransfer(sender, amount);
         } else {
@@ -205,7 +228,7 @@ contract BloomEscrow is ReentrancyGuard, EscrowTokens {
         uint256 amount = deal.amount;
         address receiver = deal.receiver;
 
-        if (tokenAddress != address(0)) {
+        if (tokenAddress != wrappedNative) {
             IERC20 token = IERC20(tokenAddress);
             token.safeTransfer(receiver, amount);
         } else {
@@ -228,7 +251,7 @@ contract BloomEscrow is ReentrancyGuard, EscrowTokens {
         // Send funds to the winner;
         address tokenAddress = deal.tokenAddress;
         uint256 amount = deal.amount;
-        if (tokenAddress != address(0)) {
+        if (tokenAddress != wrappedNative) {
             IERC20 token = IERC20(tokenAddress);
             token.safeTransfer(winner, amount);
         } else {
@@ -253,5 +276,29 @@ contract BloomEscrow is ReentrancyGuard, EscrowTokens {
 
     function getDeal(uint256 id) external view returns (TypesLib.Deal memory) {
         return deals[id];
+    }
+
+    function withdrawEscrowFee(address tokenAddress, uint256 amount) external onlyOwner {
+        uint256 escrowFee = tokenToEscrowFee[tokenAddress];
+        uint256 escrowFeeClaimed = tokenToEscrowFeeClaimed[tokenAddress];
+        uint256 remaining = escrowFee - escrowFeeClaimed;
+
+        if (remaining < amount) {
+            revert BloomEscrow__NotEnoughEscrowFee();
+        }
+
+        if (tokenAddress == wrappedNative) {
+            (bool native_success,) = msg.sender.call{value: amount}("");
+            if (!native_success) {
+                revert BloomEscrow__TransferFailed();
+            }
+        } else {
+            IERC20(tokenAddress).safeTransfer(msg.sender, amount);
+        }
+
+        tokenToEscrowFeeClaimed[tokenAddress] += amount;
+
+        emit EscrowFeeClaimed(msg.sender, tokenAddress, amount);
+
     }
 }
