@@ -113,13 +113,13 @@ abstract contract DisputeStorage {
     mapping(address jurorAddress => uint256) public ongoingDisputeCount;
     address[] public activeJurorAddresses;
     mapping(address jurorAddrres => uint256 index) public jurorAddressIndex;
-    // mapping(address jurorAddress => mapping(address tokenAddress => uint256)) public jurorTokenPayments;
-    // mapping(address jurorAddress => mapping(address tokenAddress => uint256)) public jurorTokenPaymentsClaimed;
-    // mapping(uint256 disputeId => mapping(address jurorAddress => PaymentType)) public disputeToJurorPayment;
+    mapping(address jurorAddress => mapping(address tokenAddress => uint256)) public jurorTokenPayments;
+    mapping(address jurorAddress => mapping(address tokenAddress => uint256)) public jurorTokenPaymentsClaimed;
+    mapping(uint256 disputeId => mapping(address jurorAddress => PaymentType)) public disputeToJurorPayment;
 
-    // mapping(uint256 disputeId => mapping(address tokenAddress => uint256)) public residuePayments;
-    // mapping(uint256 disputeId => mapping(address tokenAddress => uint256)) public residuePaymentsClaimed;
-    // mapping(address tokenAddress => uint256) public totalResidue;
+    mapping(uint256 disputeId => mapping(address tokenAddress => uint256)) public residuePayments;
+    mapping(uint256 disputeId => mapping(address tokenAddress => uint256)) public residuePaymentsClaimed;
+    mapping(address tokenAddress => uint256) public totalResidue;
 
     // Candidates and voting
     uint256 public appealThreshold = 3;

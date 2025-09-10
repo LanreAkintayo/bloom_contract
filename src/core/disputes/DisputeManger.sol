@@ -244,6 +244,8 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
         }
         Vote[] memory allVotes = allDisputeVotes[_disputeId];
 
+        console.log("Length of all votes: ", allVotes.length);
+
         // Determine the winner;
         (bool tie, address winner, address loser, uint256 winnerCount, uint256 loserCount) =
             _determineWinner(_disputeId, allVotes);
@@ -328,17 +330,17 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
                 votedJurorCount++;
 
                 // Share the base fee to all the voted jurors;
-                // jurorTokenPayments[currentJurorAddress][currentDispute.feeTokenAddress] += baseFee;
+                jurorTokenPayments[currentJurorAddress][currentDispute.feeTokenAddress] += baseFee;
 
                 // Insider here, they vote either for the winner or for the loser;
                 // uint256 base
                 if (currentVote.support != winner) {
                     // Update the disputeJurorPayment
-                    // disputeToJurorPayment[_disputeId][currentJurorAddress] = PaymentType({
-                    //     disputeId: _disputeId,
-                    //     tokenAddress: currentDispute.feeTokenAddress,
-                    //     amount: baseFee
-                    // });
+                    disputeToJurorPayment[_disputeId][currentJurorAddress] = PaymentType({
+                        disputeId: _disputeId,
+                        tokenAddress: currentDispute.feeTokenAddress,
+                        amount: baseFee
+                    });
 
                     uint256 amountDeducted = (currentStakeAmount * slashPercentage) / MAX_PERCENT;
                     totalAmountSlashed += amountDeducted;
@@ -427,14 +429,14 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
             bool isPresent = isInActiveJurorAddresses(currentAddress);
 
             // // Share the base fee to all the voted jurors;
-            // jurorTokenPayments[currentAddress][currentDispute.feeTokenAddress] += individualFee;
+            jurorTokenPayments[currentAddress][currentDispute.feeTokenAddress] += individualFee;
 
-            // // Update the disputeJurorPayment
-            // disputeToJurorPayment[_disputeId][currentAddress] = PaymentType({
-            //     disputeId: _disputeId,
-            //     tokenAddress: currentDispute.feeTokenAddress,
-            //     amount: baseFee + individualFee
-            // });
+            // Update the disputeJurorPayment
+            disputeToJurorPayment[_disputeId][currentAddress] = PaymentType({
+                disputeId: _disputeId,
+                tokenAddress: currentDispute.feeTokenAddress,
+                amount: baseFee + individualFee
+            });
 
             accumulatedFee += individualFee;
 
@@ -446,8 +448,8 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
 
         if (remainingFee > accumulatedFee) {
             uint256 residues = remainingFee - accumulatedFee;
-            // residuePayments[_disputeId][currentDispute.feeTokenAddress] += residues;
-            // totalResidue[currentDispute.feeTokenAddress] += residues;
+            residuePayments[_disputeId][currentDispute.feeTokenAddress] += residues;
+            totalResidue[currentDispute.feeTokenAddress] += residues;
         }
     }
 
@@ -481,17 +483,17 @@ abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
     }
 
     function claimReward(address tokenAddress, uint256 amount) external {
-        // uint256 reward = jurorTokenPayments[msg.sender][tokenAddress];
-        // uint256 rewardClaimed = jurorTokenPaymentsClaimed[msg.sender][tokenAddress];
-        // uint256 amountAvailable = reward - rewardClaimed;
+        uint256 reward = jurorTokenPayments[msg.sender][tokenAddress];
+        uint256 rewardClaimed = jurorTokenPaymentsClaimed[msg.sender][tokenAddress];
+        uint256 amountAvailable = reward - rewardClaimed;
 
-        // if (reward <= 0) {
-        //     revert DisputeManager__NoReward();
-        // }
+        if (reward <= 0) {
+            revert DisputeManager__NoReward();
+        }
 
-        // if (amountAvailable < amount) {
-        //     revert DisputeManager__NotEnoughReward();
-        // }
+        if (amountAvailable < amount) {
+            revert DisputeManager__NotEnoughReward();
+        }
 
         if (tokenAddress == wrappedNative) {
             (bool native_success,) = msg.sender.call{value: amount}("");

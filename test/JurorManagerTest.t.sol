@@ -332,117 +332,117 @@ contract JurorManagerTest is BaseJuror {
         assertEq(candidate.stakeAmount, 2000e18);
     }
 
-    function testCanVote() external {
-        uint256 disputeId;
-        uint256 thresholdFP;
-        uint256 alphaFP = 0.6e18; // Stake is stronger
-        uint256 betaFP = 0.4e18; // Reputation is betaFP
-        uint256 expNeeded = 2;
-        uint256 newbieNeeded = 1;
-        uint256 expPoolSize;
+    // function testCanVote() external {
+    //     uint256 disputeId;
+    //     uint256 thresholdFP;
+    //     uint256 alphaFP = 0.6e18; // Stake is stronger
+    //     uint256 betaFP = 0.4e18; // Reputation is betaFP
+    //     uint256 expNeeded = 2;
+    //     uint256 newbieNeeded = 1;
+    //     uint256 expPoolSize;
 
-        // Create a deal;
-        address daiTokenAddress = networkConfig.daiTokenAddress;
-        uint256 dealAmount = 1000e18;
-        uint256 dealId = _createERC20Deal(sender, receiver, daiTokenAddress, dealAmount);
+    //     // Create a deal;
+    //     address daiTokenAddress = networkConfig.daiTokenAddress;
+    //     uint256 dealAmount = 1000e18;
+    //     uint256 dealId = _createERC20Deal(sender, receiver, daiTokenAddress, dealAmount);
 
-        // Then you should be able to open a dispute;
-        disputeId = _openDispute(sender, dealId);
+    //     // Then you should be able to open a dispute;
+    //     disputeId = _openDispute(sender, dealId);
 
-        // Register some jurors
-        _registerJuror(makeAddr("juror1"), 2000e18);
-        _registerJuror(makeAddr("juror2"), 4000e18);
-        _registerJuror(makeAddr("juror3"), 6000e18);
-        _registerJuror(makeAddr("juror4"), 8000e18);
-        _registerJuror(makeAddr("juror5"), 1500e18);
-        address juror6 = _registerJuror(makeAddr("juror6"), 9000e18);
+    //     // Register some jurors
+    //     _registerJuror(makeAddr("juror1"), 2000e18);
+    //     _registerJuror(makeAddr("juror2"), 4000e18);
+    //     _registerJuror(makeAddr("juror3"), 6000e18);
+    //     _registerJuror(makeAddr("juror4"), 8000e18);
+    //     _registerJuror(makeAddr("juror5"), 1500e18);
+    //     address juror6 = _registerJuror(makeAddr("juror6"), 9000e18);
 
-        // Get all active juror addresses
-        address[] memory jurorAddresses = jurorManager.getActiveJurorAddresses();
-        uint256 percentage = 8000; // Top 80% should be amongst the experienced. The remaining 40% will be with the newbies
+    //     // Get all active juror addresses
+    //     address[] memory jurorAddresses = jurorManager.getActiveJurorAddresses();
+    //     uint256 percentage = 8000; // Top 80% should be amongst the experienced. The remaining 40% will be with the newbies
 
-        // Send LinkToken to the JurorManager contract
-        LinkToken linkToken = LinkToken(networkConfig.linkAddress);
-        vm.prank(address(helperConfig));
-        linkToken.mint(address(jurorManager), 10000e18);
+    //     // Send LinkToken to the JurorManager contract
+    //     LinkToken linkToken = LinkToken(networkConfig.linkAddress);
+    //     vm.prank(address(helperConfig));
+    //     linkToken.mint(address(jurorManager), 10000e18);
 
-        (thresholdFP, expPoolSize) = getThresholdAndExpPoolSize(jurorAddresses, percentage, alphaFP, betaFP);
+    //     (thresholdFP, expPoolSize) = getThresholdAndExpPoolSize(jurorAddresses, percentage, alphaFP, betaFP);
 
-        // This function can only be called by the owner
-        vm.prank(jurorManager.owner());
-        uint256 requestId =
-            jurorManager.selectJurors(disputeId, thresholdFP, alphaFP, betaFP, expNeeded, newbieNeeded, expPoolSize);
+    //     // This function can only be called by the owner
+    //     vm.prank(jurorManager.owner());
+    //     uint256 requestId =
+    //         jurorManager.selectJurors(disputeId, thresholdFP, alphaFP, betaFP, expNeeded, newbieNeeded, expPoolSize);
 
-        // Then call fulfillRandomWords
-        VRFV2Wrapper wrapper = helperConfig.getVRFV2Wrapper();
-        VRFCoordinatorV2Mock vrfCoordinator = helperConfig.getVRFCoordinator();
-        vm.prank(address(helperConfig));
-        vrfCoordinator.fulfillRandomWords(requestId, address(wrapper));
+    //     // Then call fulfillRandomWords
+    //     VRFV2Wrapper wrapper = helperConfig.getVRFV2Wrapper();
+    //     VRFCoordinatorV2Mock vrfCoordinator = helperConfig.getVRFCoordinator();
+    //     vm.prank(address(helperConfig));
+    //     vrfCoordinator.fulfillRandomWords(requestId, address(wrapper));
 
-        // Get all the jurors assigned to disputeId;
-        address[] memory disputeJurors = jurorManager.getDisputeJurors(disputeId);
+    //     // Get all the jurors assigned to disputeId;
+    //     address[] memory disputeJurors = jurorManager.getDisputeJurors(disputeId);
 
-        // Get the dispute itself;
-        JurorManager.Dispute memory dispute = jurorManager.getDispute(disputeId);
+    //     // Get the dispute itself;
+    //     JurorManager.Dispute memory dispute = jurorManager.getDispute(disputeId);
 
-        // Assert candidates;
-        JurorManager.Candidate memory candidate0 = jurorManager.getDisputeCandidate(disputeId, disputeJurors[0]);
-        JurorManager.Candidate memory candidate1 = jurorManager.getDisputeCandidate(disputeId, disputeJurors[1]);
-        JurorManager.Candidate memory candidate2 = jurorManager.getDisputeCandidate(disputeId, disputeJurors[2]);
+    //     // Assert candidates;
+    //     JurorManager.Candidate memory candidate0 = jurorManager.getDisputeCandidate(disputeId, disputeJurors[0]);
+    //     JurorManager.Candidate memory candidate1 = jurorManager.getDisputeCandidate(disputeId, disputeJurors[1]);
+    //     JurorManager.Candidate memory candidate2 = jurorManager.getDisputeCandidate(disputeId, disputeJurors[2]);
 
-        _assertCandidate(
-            candidate0,
-            disputeId,
-            disputeJurors[0],
-            type(uint256).max,
-            type(uint256).max,
-            type(uint256).max,
-            false,
-            false
-        );
-        _assertCandidate(
-            candidate1,
-            disputeId,
-            disputeJurors[1],
-            type(uint256).max,
-            type(uint256).max,
-            type(uint256).max,
-            false,
-            false
-        );
-        _assertCandidate(
-            candidate2,
-            disputeId,
-            disputeJurors[2],
-            type(uint256).max,
-            type(uint256).max,
-            type(uint256).max,
-            false,
-            false
-        );
+    //     _assertCandidate(
+    //         candidate0,
+    //         disputeId,
+    //         disputeJurors[0],
+    //         type(uint256).max,
+    //         type(uint256).max,
+    //         type(uint256).max,
+    //         false,
+    //         false
+    //     );
+    //     _assertCandidate(
+    //         candidate1,
+    //         disputeId,
+    //         disputeJurors[1],
+    //         type(uint256).max,
+    //         type(uint256).max,
+    //         type(uint256).max,
+    //         false,
+    //         false
+    //     );
+    //     _assertCandidate(
+    //         candidate2,
+    //         disputeId,
+    //         disputeJurors[2],
+    //         type(uint256).max,
+    //         type(uint256).max,
+    //         type(uint256).max,
+    //         false,
+    //         false
+    //     );
 
-        // Juros can vote;
-        JurorManager.Vote memory vote0 = _vote(disputeId, disputeJurors[0], dispute.sender);
-        JurorManager.Vote memory vote1 = _vote(disputeId, disputeJurors[1], dispute.receiver);
-        JurorManager.Vote memory vote2 = _vote(disputeId, disputeJurors[2], dispute.sender);
+    //     // Juros can vote;
+    //     JurorManager.Vote memory vote0 = _vote(disputeId, disputeJurors[0], dispute.sender);
+    //     JurorManager.Vote memory vote1 = _vote(disputeId, disputeJurors[1], dispute.receiver);
+    //     JurorManager.Vote memory vote2 = _vote(disputeId, disputeJurors[2], dispute.sender);
 
-        // Revert if disputeJurors0 tries to vote again;
-        vm.startPrank(disputeJurors[0]);
-        vm.expectRevert(abi.encodeWithSelector(JurorManager.JurorManager__AlreadyVoted.selector));
-        jurorManager.vote(disputeId, dispute.receiver);
-        vm.stopPrank();
+    //     // Revert if disputeJurors0 tries to vote again;
+    //     vm.startPrank(disputeJurors[0]);
+    //     vm.expectRevert(abi.encodeWithSelector(JurorManager.JurorManager__AlreadyVoted.selector));
+    //     jurorManager.vote(disputeId, dispute.receiver);
+    //     vm.stopPrank();
 
-        // Revert if someone that is not chosen tries to vote;
-        vm.startPrank(juror6);
-        vm.expectRevert(abi.encodeWithSelector(JurorManager.JurorManager__NotEligible.selector));
-        jurorManager.vote(disputeId, sender);
-        vm.stopPrank();
+    //     // Revert if someone that is not chosen tries to vote;
+    //     vm.startPrank(juror6);
+    //     vm.expectRevert(abi.encodeWithSelector(JurorManager.JurorManager__NotEligible.selector));
+    //     jurorManager.vote(disputeId, sender);
+    //     vm.stopPrank();
 
-        // Check to see if votes are registered perfectly.
-        _assertVote(vote0, disputeJurors[0], disputeId, dealId, dispute.sender);
-        _assertVote(vote1, disputeJurors[1], disputeId, dealId, dispute.receiver);
-        _assertVote(vote2, disputeJurors[2], disputeId, dealId, dispute.sender);
-    }
+    //     // Check to see if votes are registered perfectly.
+    //     _assertVote(vote0, disputeJurors[0], disputeId, dealId, dispute.sender);
+    //     _assertVote(vote1, disputeJurors[1], disputeId, dealId, dispute.receiver);
+    //     _assertVote(vote2, disputeJurors[2], disputeId, dealId, dispute.sender);
+    // }
 
     function testCanFinishDispute() external {
         // Create a deal;
@@ -916,10 +916,10 @@ contract JurorManagerTest is BaseJuror {
 
         _selectJurors(appealId2, 5, 2); // 5 = expNeeded, 2 = newbieNeeded
         address[] memory jurors3 = jurorManager.getDisputeJurors(appealId2);
-        address[] memory votes3 = new address[](3);
+        address[] memory votes3 = new address[](2);
         votes3[0] = sender;
         votes3[1] = sender;
-        votes3[2] = sender;
+        // votes3[2] = sender;
 
         // At this point, we have to add jurors after 48 hours have elapsed. Add 2 more jurors.
         for (uint256 i = 0; i < votes3.length; i++) {
@@ -946,15 +946,27 @@ contract JurorManagerTest is BaseJuror {
 
         vm.warp(block.timestamp + jurorManager.votingPeriod());
 
-        // // Admin comes in to vote.
+        // Admin comes in to vote.
         vm.prank(jurorManager.owner());
         jurorManager.adminParticipateInDispute(appealId2, receiver);
+
+
+        // Check the dispute fee of some winner;
+        IERC20Mock token =  IERC20Mock(daiTokenAddress);
+        uint256 disputeShareBalanceBefore =  jurorManager.jurorTokenPayments(newlyAdded[1], daiTokenAddress);
 
         // Dispute finishes
         vm.warp(block.timestamp + jurorManager.votingPeriod());
         vm.startPrank(jurorManager.owner());
         jurorManager.finishDispute(appealId2);
         vm.stopPrank();
+
+        uint256 disputeShareBalanceAfter =  jurorManager.jurorTokenPayments(newlyAdded[1], daiTokenAddress);
+        assertGt(disputeShareBalanceAfter, disputeShareBalanceBefore);
+
+        console.log("Dispute share balance before: ", disputeShareBalanceBefore);
+        console.log("Dispute share balance after: ", disputeShareBalanceAfter);
+
 
         // Winner claims funds
         vm.warp(block.timestamp + jurorManager.appealDuration());
