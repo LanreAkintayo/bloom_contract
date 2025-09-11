@@ -48,6 +48,7 @@ abstract contract DisputeStorage {
         uint256 stakeAmount;
         uint256 reputation;
         uint256 missedVotesCount;
+        uint256 lastWithdrawn;
     }
 
     // Keeps track of the stake amount and reputation at selection
@@ -106,6 +107,8 @@ abstract contract DisputeStorage {
     mapping(uint256 dealId => mapping(address => Evidence[])) public dealEvidences;
 
     // Jurors
+    uint256 public lockedPercentage = 7000; // 70% of the staked amount will be locked
+    uint256 public cooldownDuration = 7 days;
     mapping(address jurorAddress => Juror) public jurors;
     address[] public allJurorAddresses;
     mapping(address jurorAddress => bool) public isJurorActive;

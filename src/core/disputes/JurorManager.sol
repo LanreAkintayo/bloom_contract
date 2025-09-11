@@ -42,6 +42,11 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
     error JurorManager__MaxAppealExceeded();
     error JurorManager__AlreadyWinner();
     error JurorManager__MustVote();
+    error JurorManager__NotEnoughStakeToWithdraw();
+    error JurorManager__WithdrawalCooldownNotOver();
+
+
+
 
     /*//////////////////////////////////////////////////////////////
                                 EVENTS
@@ -57,6 +62,8 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
     event AdminParticipatedInDispute(uint256 indexed _disputeId, address indexed support);
     event JurorAdded(uint256 indexed _disputeId, address[] indexed newJurors);
     event StandardVotingDurationExtended(uint256 indexed _disputeId, uint256 indexed _extendDuration);
+    event StakeWithdrawn(address indexed jurorAddress, uint256 indexed amount);
+
 
     /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
@@ -632,6 +639,30 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
         console.log("Length of all dispute votes: ", allDisputeVotes[_disputeId].length);
 
         emit AdminParticipatedInDispute(_disputeId, _support);
+    }
+
+    function withdrawStake(uint256 _stakeAmount) external {
+        Juror storage juror = jurors[msg.sender];
+
+        if (block.timestamp < juror.lastWithdrawn + cooldownDuration){
+            revert JurorManager__WithdrawalCooldownNotOver();
+        }
+        
+        uint256 totalStakedAmount = juror.stakeAmount;
+        uint256 lockedAmount = (lockedPercentage * totalStakedAmount) / MAX_PERCENT;
+        uint256 availableToWithdraw = totalStakedAmount - lockedAmount;
+
+        if (_stakeAmount > availableToWithdraw) {
+            revert JurorManager__NotEnoughStakeToWithdraw();
+        }
+
+        bloomToken.safeTransfer(msg.sender, _stakeAmount);
+
+        juror.stakeAmount -= _stakeAmount;
+        juror.lastWithdrawn = block.timestamp;
+
+        emit StakeWithdrawn(msg.sender, _stakeAmount);
+
     }
 
     function updateMinStakeAmount(uint256 _minStakeAmount) external onlyOwner {

@@ -110,7 +110,7 @@ contract JurorManagerTest is BaseJuror {
 
     function _voteFlow(uint256 disputeId, address[] memory jurors, address[] memory votes) internal {
         // votes[i] is the party the juror votes for
-        for (uint256 i = 0; i < jurors.length; i++) {
+        for (uint256 i = 0; i < votes.length; i++) {
             _vote(disputeId, jurors[i], votes[i]);
         }
 
@@ -705,7 +705,7 @@ contract JurorManagerTest is BaseJuror {
 
         _selectJurors(appealId2, 5, 2); // 5 = expNeeded, 2 = newbieNeeded
         address[] memory jurors3 = jurorManager.getDisputeJurors(appealId2);
-        address[] memory votes3 = new address[](jurors3.length);
+        address[] memory votes3 = new address[](5);
         votes3[0] = receiver;
         votes3[1] = sender;
         votes3[2] = receiver;
@@ -963,10 +963,6 @@ contract JurorManagerTest is BaseJuror {
 
         uint256 disputeShareBalanceAfter =  jurorManager.jurorTokenPayments(newlyAdded[1], daiTokenAddress);
         assertGt(disputeShareBalanceAfter, disputeShareBalanceBefore);
-
-        console.log("Dispute share balance before: ", disputeShareBalanceBefore);
-        console.log("Dispute share balance after: ", disputeShareBalanceAfter);
-
 
         // Winner claims funds
         vm.warp(block.timestamp + jurorManager.appealDuration());

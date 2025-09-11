@@ -25,12 +25,13 @@ contract BloomEscrowTest is Test {
 
     function setUp() external {
         // Deploy contracts
+        
         deployBloomEscrow = new DeployBloomEscrow();
         (bloomEscrow, helperConfig) = deployBloomEscrow.run();
         networkConfig = helperConfig.getConfigByChainId(block.chainid);
-
+        
         deployFeeController = new DeployFeeController();
-        (feeController, helperConfig) = deployFeeController.run();
+        (feeController, ) = deployFeeController.run();
         networkConfig = helperConfig.getConfigByChainId(block.chainid);
 
         // Link fee controller
@@ -83,7 +84,9 @@ contract BloomEscrowTest is Test {
         vm.deal(_sender, 100 ether);
 
         vm.startPrank(_sender);
-        bloomEscrow.createDeal{value: totalAmount}(_sender, _receiver, address(0), amount);
+        console.log("Network.wethTokenAddress: ", networkConfig.wethTokenAddress);
+        console.log("Network.wrappedTokenAddress: ", networkConfig.wrappedNativeTokenAddress);
+        bloomEscrow.createDeal{value: totalAmount}(_sender, _receiver, networkConfig.wethTokenAddress, amount);
         vm.stopPrank();
 
         return bloomEscrow.dealCount() - 1;
@@ -124,7 +127,7 @@ contract BloomEscrowTest is Test {
         uint256 dealId = _createETHDeal(sender, receiver, amount);
 
         TypesLib.Deal memory deal = bloomEscrow.getDeal(dealId);
-        _assertDeal(deal, sender, receiver, address(0), amount, TypesLib.Status.Pending);
+        _assertDeal(deal, sender, receiver, networkConfig.wethTokenAddress, amount, TypesLib.Status.Pending);
 
         uint256 escrowFee = feeController.calculateEscrowFee(amount);
         assertEq(address(bloomEscrow).balance, amount + escrowFee);
