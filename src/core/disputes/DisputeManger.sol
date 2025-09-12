@@ -12,9 +12,8 @@ import {console} from "forge-std/Test.sol";
 
 /// @title Dispute Manager for Bloom Escrow
 /// @notice Handles disputes and evidence for deals in BloomEscrow
-abstract contract DisputeManager is ConfirmedOwner {
+abstract contract DisputeManager is DisputeStorage, ConfirmedOwner {
     using SafeERC20 for IERC20;
-    DisputeStorage public ds;
 
     //////////////////////////
     // ERRORS
@@ -48,7 +47,7 @@ abstract contract DisputeManager is ConfirmedOwner {
         address indexed uploader,
         string uri,
         uint128 timestamp,
-        DisputeStorage.EvidenceType evidenceType,
+        EvidenceType evidenceType,
         string description
     );
     event DisputeAppealed(uint256 indexed dealId, uint256 indexed appealId, address indexed participant);
@@ -61,13 +60,12 @@ abstract contract DisputeManager is ConfirmedOwner {
     // CONSTRUCTOR
     //////////////////////////
 
-    constructor(address escrowAddress, address feeControllerAddress, address wrappedNativeTokenAddress, address storageAddress)
+    constructor(address escrowAddress, address feeControllerAddress, address wrappedNativeTokenAddress)
         ConfirmedOwner(msg.sender)
     {
         bloomEscrow = IBloomEscrow(escrowAddress);
         feeController = IFeeController(feeControllerAddress);
         wrappedNative = wrappedNativeTokenAddress;
-        ds = DisputeStorage(storageAddress);
     }
 
     //////////////////////////
@@ -268,7 +266,7 @@ abstract contract DisputeManager is ConfirmedOwner {
         emit DisputeFinished(_disputeId, winner, loser, winnerCount, loserCount);
     }
 
-    function _determineWinner(uint256 _disputeId, DisputeStorage.Vote[] memory allVotes)
+    function _determineWinner(uint256 _disputeId, Vote[] memory allVotes)
         internal
         view
         returns (bool tie, address winner, address loser, uint256 winnerCount, uint256 loserCount)
@@ -516,7 +514,7 @@ abstract contract DisputeManager is ConfirmedOwner {
     /// @param uri The URI of the evidence (IPFS or similar)
     /// @param evidenceType The type of evidence
     /// @param description Additional description of the evidence
-    function addEvidence(uint256 dealId, string calldata uri, DisputeStorage.EvidenceType evidenceType, string calldata description)
+    function addEvidence(uint256 dealId, string calldata uri, EvidenceType evidenceType, string calldata description)
         external
     {
         TypesLib.Deal memory deal = bloomEscrow.getDeal(dealId);
@@ -604,23 +602,23 @@ abstract contract DisputeManager is ConfirmedOwner {
 
     }
 
-    function getDispute(uint256 _disputeId) external view returns (DisputeStorage.Dispute memory) {
+    function getDispute(uint256 _disputeId) external view returns (Dispute memory) {
         return disputes[_disputeId];
     }
 
-    function getDisputeCandidate(uint256 _disputeId, address _jurorAddress) external view returns (DisputeStorage.Candidate memory) {
+    function getDisputeCandidate(uint256 _disputeId, address _jurorAddress) external view returns (Candidate memory) {
         return isDisputeCandidate[_disputeId][_jurorAddress];
     }
 
-    function getDisputeVote(uint256 _disputeId, address _jurorAddress) external view returns (DisputeStorage.Vote memory) {
+    function getDisputeVote(uint256 _disputeId, address _jurorAddress) external view returns (Vote memory) {
         return disputeVotes[_disputeId][_jurorAddress];
     }
 
-    function getDisputeVotes(uint256 _disputeId) external view returns (DisputeStorage.Vote[] memory) {
+    function getDisputeVotes(uint256 _disputeId) external view returns (Vote[] memory) {
         return allDisputeVotes[_disputeId];
     }
 
-    function getDisputeTimer(uint256 _disputeId) external view returns (DisputeStorage.Timer memory) {
+    function getDisputeTimer(uint256 _disputeId) external view returns (Timer memory) {
         return disputeTimer[_disputeId];
     }
 

@@ -6,7 +6,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IBloomEscrow} from "../../interfaces/IBloomEscrow.sol";
 import {IFeeController} from "../../interfaces/IFeeController.sol";
 
-contract DisputeStorage {
+abstract contract DisputeStorage {
     //////////////////////////
     // ENUMS
     //////////////////////////
@@ -108,7 +108,7 @@ contract DisputeStorage {
 
     // Jurors
     uint256 public lockedPercentage = 7000; // 70% of the staked amount will be locked
-    uint256 public cooldownDuration = block.chainid == 31337 ? 15 minutes : 7 days;
+    uint256 public cooldownDuration = block.chainid == 31337 ? 1 minutes : 7 days;
     mapping(address jurorAddress => Juror) public jurors;
     address[] public allJurorAddresses;
     mapping(address jurorAddress => bool) public isJurorActive;
