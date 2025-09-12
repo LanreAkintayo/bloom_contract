@@ -126,4 +126,16 @@ contract DisputeStorage {
     function pushIntoDisputeAppeals(uint256 _disputeId, uint256 _appealId) external {
         disputeAppeals[_disputeId].push(_appealId);
     }
+
+    function setAppealToDispute(uint256 _appealId, uint256 _disputeId) external {
+        appealToDispute[_appealId] = _disputeId;
+    }
+
+    function getAllDisputeVotes(uint256 _disputeId) external view returns (TypesLib.Vote[] memory) {
+        return allDisputeVotes[_disputeId];
+    }
+
+    function getDisputeCandidate(uint256 _disputeId, address _jurorAddress) external view returns (TypesLib.Candidate memory) {
+        return isDisputeCandidate[_disputeId][_jurorAddress];
+    }
 }

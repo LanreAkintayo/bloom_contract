@@ -21,6 +21,9 @@ contract DisputeManager is ConfirmedOwner {
     IERC20 public bloomToken;
     address public wrappedNative;
 
+    uint256 public MAX_PERCENT = 10_000;
+
+
     //////////////////////////
     // ERRORS
     //////////////////////////
@@ -241,20 +244,21 @@ contract DisputeManager is ConfirmedOwner {
         ds.pushIntoDisputeAppeals(_disputeId, newDisputeId);
         // disputeAppeals[_disputeId].push(disputeId);
 
-        
-        appealToDispute[disputeId] = _disputeId; // Appeal id is the disputeId, the _disputeId is passed from the function
+        ds.setAppealToDispute(newDisputeId, _disputeId);
+        // appealToDispute[disputeId] = _disputeId; // Appeal id is the disputeId, the _disputeId is passed from the function
 
         // Emit an event
-        emit DisputeAppealed(dealId, disputeId, msg.sender);
+        emit DisputeAppealed(dealId, newDisputeId, msg.sender);
 
-        return disputeId;
+        return newDisputeId;
     }
 
     function finishDispute(uint256 _disputeId) external onlyOwner {
         // Check if voting time has elapsed;
-        Timer memory appealDisputeTimer = disputeTimer[_disputeId];
+        TypesLib.Timer memory appealDisputeTimer = ds.getDisputeTimer(_disputeId);
+        TypesLib.Dispute memory disputeToFinish = ds.getDispute(_disputeId);
 
-        if (disputes[_disputeId].winner != address(0)) {
+        if (disputeToFinish.winner != address(0)) {
             revert DisputeManager__AlreadyFinished();
         }
 
@@ -265,9 +269,9 @@ contract DisputeManager is ConfirmedOwner {
         ) {
             revert DisputeManager__NotFinished();
         }
-        Vote[] memory allVotes = allDisputeVotes[_disputeId];
+        TypesLib.Vote[] memory allVotes = ds.getAllDisputeVotes(_disputeId);
 
-        console.log("Length of all votes: ", allVotes.length);
+        // console.log("Length of all votes: ", allVotes.length);
 
         // Determine the winner;
         (bool tie, address winner, address loser, uint256 winnerCount, uint256 loserCount) =
@@ -283,7 +287,8 @@ contract DisputeManager is ConfirmedOwner {
         _distributeRewardAndReputation(tie, _disputeId, winner, winnerCount);
 
         // Update all the states
-        disputes[_disputeId].winner = winner;
+        ds.updateDisputeWinner(_disputeId, winner);
+        // disputes[_disputeId].winner = winner;
 
         // Emit events;
         emit DisputeFinished(_disputeId, winner, loser, winnerCount, loserCount);
@@ -294,7 +299,7 @@ contract DisputeManager is ConfirmedOwner {
         view
         returns (bool tie, address winner, address loser, uint256 winnerCount, uint256 loserCount)
     {
-        Dispute memory d = disputes[_disputeId];
+        TypesLib.Dispute memory d = ds.getDispute(_disputeId);
         uint256 initiatorCount;
         uint256 againstCount;
 
@@ -326,17 +331,17 @@ contract DisputeManager is ConfirmedOwner {
 
         uint256 totalAmountSlashed;
         uint256 totalWinnerStakedAmount;
-        address[] memory selectedJurors = disputeJurors[_disputeId];
+        address[] memory selectedJurors = ds.getDisputeJurors(_disputeId); 
         address[] memory winnersAlone = new address[](winnerCount);
         uint256 winnerId = 0;
         uint256 votedJurorCount = 0;
-        Dispute memory currentDispute = disputes[_disputeId];
-        uint256 baseFee = (basePercentage * currentDispute.disputeFee) / MAX_PERCENT;
+        TypesLib.Dispute memory currentDispute = ds.getDispute(_disputeId); 
+        uint256 baseFee = (ds.basePercentage() * currentDispute.disputeFee) / MAX_PERCENT;
 
         // Calculate the total amount slashed from the losers
         for (uint256 i = 0; i < selectedJurors.length; i++) {
             // Make sure you deal with only the jurors that voted;
-            Candidate memory currentCandidate = isDisputeCandidate[_disputeId][selectedJurors[i]];
+            TypesLib.Candidate memory currentCandidate = ds.getDisputeCandidate(_disputeId, selectedJurors[i]);
             address currentJurorAddress = currentCandidate.jurorAddress;
             uint256 currentStakeAmount = currentCandidate.stakeAmount;
             Vote memory currentVote = disputeVotes[_disputeId][currentJurorAddress];
