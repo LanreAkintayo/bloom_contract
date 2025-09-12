@@ -5,6 +5,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IBloomEscrow} from "../../interfaces/IBloomEscrow.sol";
 import {IFeeController} from "../../interfaces/IFeeController.sol";
+import {TypesLib} from "../../library/TypesLib.sol";
 
 contract DisputeStorage {
    
@@ -23,15 +24,15 @@ contract DisputeStorage {
     uint256 public disputeId;
     uint256 public constant MAX_PERCENT = 10_000; // This represents 100%
     mapping(uint256 dealId => uint256 disputeId) public dealToDispute;
-    mapping(uint256 disputeId => Dispute) public disputes;
+    mapping(uint256 disputeId => TypesLib.Dispute) public disputes;
 
     // address can either be the sender or the proposed receiver
-    mapping(uint256 dealId => mapping(address => Evidence[])) public dealEvidences;
+    mapping(uint256 dealId => mapping(address => TypesLib.Evidence[])) public dealEvidences;
 
     // Jurors
     uint256 public lockedPercentage = 7000; // 70% of the staked amount will be locked
     uint256 public cooldownDuration = block.chainid == 31337 ? 15 minutes : 7 days;
-    mapping(address jurorAddress => Juror) public jurors;
+    mapping(address jurorAddress => TypesLib.Juror) public jurors;
     address[] public allJurorAddresses;
     mapping(address jurorAddress => bool) public isJurorActive;
     mapping(address jurorAddress => uint256[] disputeIds) public jurorDisputeHistory;
@@ -40,7 +41,7 @@ contract DisputeStorage {
     mapping(address jurorAddrres => uint256 index) public jurorAddressIndex;
     mapping(address jurorAddress => mapping(address tokenAddress => uint256)) public jurorTokenPayments;
     mapping(address jurorAddress => mapping(address tokenAddress => uint256)) public jurorTokenPaymentsClaimed;
-    mapping(uint256 disputeId => mapping(address jurorAddress => PaymentType)) public disputeToJurorPayment;
+    mapping(uint256 disputeId => mapping(address jurorAddress => TypesLib.PaymentType)) public disputeToJurorPayment;
 
     mapping(uint256 disputeId => mapping(address tokenAddress => uint256)) public residuePayments;
     mapping(uint256 disputeId => mapping(address tokenAddress => uint256)) public residuePaymentsClaimed;
@@ -55,10 +56,10 @@ contract DisputeStorage {
     uint256 public noVoteK = 8; // Step size for not failing to vote
     uint256 public votingPeriod = block.chainid == 31337 ? 15 minutes : 48 hours;
     mapping(uint256 disputeId => address[] jurorAddresses) public disputeJurors;
-    mapping(uint256 disputeId => mapping(address jurorAddress => Candidate)) public isDisputeCandidate;
-    mapping(uint256 disputeId => Timer) public disputeTimer;
-    mapping(uint256 disputeId => mapping(address jurorAddress => Vote)) public disputeVotes;
-    mapping(uint256 disputeId => Vote[]) public allDisputeVotes;
+    mapping(uint256 disputeId => mapping(address jurorAddress => TypesLib.Candidate)) public isDisputeCandidate;
+    mapping(uint256 disputeId => TypesLib.Timer) public disputeTimer;
+    mapping(uint256 disputeId => mapping(address jurorAddress => TypesLib.Vote)) public disputeVotes;
+    mapping(uint256 disputeId => TypesLib.Vote[]) public allDisputeVotes;
 
     // Appeals
     mapping(uint256 disputeId => uint256[] appeals) public disputeAppeals;
@@ -83,4 +84,46 @@ contract DisputeStorage {
 
     uint256[] public requestIds;
     uint256 public lastRequestId;
+
+
+    function incrementDisputeId() external returns (uint256) {
+        disputeId += 1;
+        return disputeId;
+    }
+
+    function setDisputes(uint256 _disputeId, TypesLib.Dispute memory _dispute) external {
+        disputes[_disputeId] = _dispute;
+    }
+
+    function getDispute(uint256 _disputeId) external view returns (TypesLib.Dispute memory) {
+        return disputes[_disputeId];
+    }
+
+    function setDealToDispute(uint256 _dealId, uint256 _disputeId) external {
+        dealToDispute[_dealId] = _disputeId;
+    }
+
+    function updateDisputeWinner(uint256 _disputeId, address _winner) external {
+        disputes[_disputeId].winner = _winner;
+    }
+
+    function getDisputeJurors(uint256 _disputeId) external view returns (address[] memory) {
+        return disputeJurors[_disputeId];
+    }
+    function getDisputeAppeals(uint256 _disputeId) external view returns (uint256[] memory) {
+        return disputeAppeals[_disputeId];
+    }
+
+    function incrementAppealCount(uint256 _disputeId) external returns(uint256) {
+        appealCounts[_disputeId] += 1;
+        return appealCounts[_disputeId];
+    }
+
+    function getDisputeTimer(uint256 _disputeId) external view returns (TypesLib.Timer memory) {
+        return disputeTimer[_disputeId];
+    }
+
+    function pushIntoDisputeAppeals(uint256 _disputeId, uint256 _appealId) external {
+        disputeAppeals[_disputeId].push(_appealId);
+    }
 }
