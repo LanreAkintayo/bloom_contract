@@ -3,7 +3,6 @@ pragma solidity ^0.8.20;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
-import { console} from "forge-std/Test.sol";
 
 /// @title FeePercentageController
 /// @notice Centralized fee management for Bloom (escrow, dispute, and juror shares)
@@ -36,13 +35,11 @@ contract FeeController is Ownable {
     //////////////////////////////////////////////////////////////*/
 
     constructor(uint256 _escrowFeePercentage, uint256 _disputeFeePercentage, uint256 _minimumAppealFee)
-        // uint256 _jurorShare
         Ownable(msg.sender)
     {
         escrowFeePercentage = _escrowFeePercentage;
         disputeFeePercentage = _disputeFeePercentage;
         minimumAppealFee = _minimumAppealFee;
-        // jurorShare = _jurorShare;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -62,13 +59,6 @@ contract FeeController is Ownable {
         }
         disputeFeePercentage = _disputeFeePercentage;
     }
-
-    // function setJurorShare(uint256 _jurorShare) external onlyOwner {
-    //     if (_jurorShare > MAX_FEE_PERCENTAGE) {
-    //         revert FeePercentageController__InvalidFeePercentage();
-    //     }
-    //     jurorShare = _jurorShare;
-    // }
 
     /*//////////////////////////////////////////////////////////////
                               CALCULATION FUNCTIONS

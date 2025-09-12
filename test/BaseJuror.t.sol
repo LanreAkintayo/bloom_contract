@@ -5,10 +5,10 @@ pragma solidity ^0.8.20;
 import {Test, console} from "forge-std/Test.sol";
 
 // Scripts
-import {DeployBloom} from "../script/DeployBloom.s.sol";
-import {DeployBloomEscrow} from "../script/DeployBloomEscrow.s.sol";
-import {DeployFeeController} from "../script/DeployFeeController.s.sol";
-import {DeployJurorManager} from "../script/DeployJurorManager.s.sol";
+import {DeployBloom} from "../script/deploy/DeployBloom.s.sol";
+import {DeployBloomEscrow} from "../script/deploy/DeployBloomEscrow.s.sol";
+import {DeployFeeController} from "../script/deploy/DeployFeeController.s.sol";
+import {DeployJurorManager} from "../script/deploy/DeployJurorManager.s.sol";
 
 // Core contracts
 import {Bloom} from "../src/token/Bloom.sol";
@@ -54,13 +54,14 @@ contract BaseJuror is Test {
 
         // Deploy JurorManager
         deployJurorManager = new DeployJurorManager();
-        (jurorManager, ) = deployJurorManager.run(
+        (jurorManager, ) = deployJurorManager.deploy(
             address(bloom),
             networkConfig.linkAddress,
             networkConfig.wrapperAddress,
             address(bloomEscrow),
             address(feeController),
-            networkConfig.wrappedNativeTokenAddress
+            networkConfig.wrappedNativeTokenAddress,
+            helperConfig
         );
 
         // Link FeeController and dispute manager to BloomEscrow

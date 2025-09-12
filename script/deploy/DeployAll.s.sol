@@ -2,11 +2,11 @@
 pragma solidity ^0.8.20;
 
 import {Script, console2} from "forge-std/Script.sol";
-import {Bloom} from "../src/token/Bloom.sol";
-import {BloomEscrow} from "../src/core/escrow/BloomEscrow.sol";
-import {FeeController} from "../src/core/FeeController.sol";
-import {JurorManager} from "../src/core/disputes/JurorManager.sol";
-import {HelperConfig} from "./HelperConfig.s.sol";
+import {Bloom} from "../../src/token/Bloom.sol";
+import {BloomEscrow} from "../../src/core/escrow/BloomEscrow.sol";
+import {FeeController} from "../../src/core/FeeController.sol";
+import {JurorManager} from "../../src/core/disputes/JurorManager.sol";
+import {HelperConfig} from "../HelperConfig.s.sol";
 
 // Import your individual deploy scripts
 import {DeployBloom} from "./DeployBloom.s.sol";
@@ -33,14 +33,16 @@ contract DeployAll is Script {
 
         // 4. Deploy JurorManager (requires addresses of others)
         DeployJurorManager deployJurorManager = new DeployJurorManager();
-        (JurorManager jurorManager,) = deployJurorManager.run(
+        (JurorManager jurorManager,) = deployJurorManager.deploy(
             address(bloom),
             networkConfig.linkAddress,
             networkConfig.wrapperAddress,
             address(bloomEscrow),
             address(feeController),
-            networkConfig.wrappedNativeTokenAddress
+            networkConfig.wrappedNativeTokenAddress,
+            helperConfig
         );
+
 
         console2.log("Bloom deployed at:", address(bloom));
         console2.log("FeeController deployed at:", address(feeController));

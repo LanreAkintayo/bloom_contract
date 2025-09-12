@@ -3,13 +3,13 @@ pragma solidity ^0.8.20;
 
 
 import {Test, console} from "forge-std/Test.sol";
-import {DeployBloomEscrow} from "../script/DeployBloomEscrow.s.sol";
+import {DeployBloomEscrow} from "../script/deploy/DeployBloomEscrow.s.sol";
 import {BloomEscrow} from "../src/core/escrow/BloomEscrow.sol";
 import {Bloom} from "../src/token/Bloom.sol";
 import {HelperConfig} from "../script/HelperConfig.s.sol";
 import {IERC20Mock} from "../src/interfaces/IERC20Mock.sol";
 import {FeeController} from "../src/core/FeeController.sol";
-import {DeployFeeController} from "../script/DeployFeeController.s.sol";
+import {DeployFeeController} from "../script/deploy/DeployFeeController.s.sol";
 import {TypesLib} from "../src/library/TypesLib.sol";
 
 contract BloomEscrowTest is Test {

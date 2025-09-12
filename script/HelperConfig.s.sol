@@ -92,15 +92,15 @@ contract HelperConfig is CodeConstants, Script {
     function getSepoliaEthConfig() public pure returns (NetworkConfig memory) {
         NetworkConfig memory sepoliaConfig = NetworkConfig({
             ethUsdPriceFeed: 0x694AA1769357215DE4FAC081bf1f309aDC325306,
-            usdcUsdPriceFeed: address(0),
-            daiUsdPriceFeed: address(0),
-            usdcTokenAddress: 0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174,
-            daiTokenAddress: 0x6B175474E89094C44Da98b954EedeAC495271d0F,
-            wethTokenAddress: 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2,
-            linkAddress: 0x326C977E6efc84E512bB9C30f76E30c160eD06FB,
-            wrapperAddress: 0x326C977E6efc84E512bB9C30f76E30c160eD06FB,
-            bloomTokenAddress: address(0),
-            wrappedNativeTokenAddress: address(0)
+            usdcUsdPriceFeed: 0xA2F78ab2355fe2f984D808B5CeE7FD0A93D5270E,
+            daiUsdPriceFeed: 0x14866185B1962B63C3Ea9E03Bc1da838bab34C19,
+            usdcTokenAddress: 0x94a9D9AC8a22534E3FaCa9F4e7F2E2cf85d5E4C8, //6
+            daiTokenAddress: 0xFF34B3d4Aee8ddCd6F9AFFFB6Fe49bD371b8a357,
+            wethTokenAddress: 0xC558DBdd856501FCd9aaF1E62eae57A9F0629a3c,
+            linkAddress: 0x779877A7B0D9E8603169DdbD7836e478b4624789,
+            wrapperAddress: 0xab18414CD93297B0d12ac29E63Ca20f515b3DB46,
+            bloomTokenAddress: 0x4138941D4b55b864ceC671E6737636107587c695,
+            wrappedNativeTokenAddress: 0xC558DBdd856501FCd9aaF1E62eae57A9F0629a3c
         });
         return sepoliaConfig;
     }

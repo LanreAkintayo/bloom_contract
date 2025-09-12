@@ -8,7 +8,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {TypesLib} from "../../library/TypesLib.sol";
 import {IFeeController} from "../../interfaces/IFeeController.sol";
 import {EscrowTokens} from "./EscrowTokens.sol";
-import {console, Test} from "forge-std/Test.sol";
+
 
 contract BloomEscrow is ReentrancyGuard, EscrowTokens {
     using SafeERC20 for IERC20;
@@ -148,8 +148,6 @@ contract BloomEscrow is ReentrancyGuard, EscrowTokens {
             tokenToEscrowFee[tokenAddress] += escrowFee;
         }
 
-        console.log("msg.value: ", msg.value);
-        console.log("total amount: ", totalAmount);
         if (msg.value > 0 && msg.value < totalAmount) {
             revert BloomEscrow__TransferFailed();
         }

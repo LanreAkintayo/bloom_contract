@@ -6,7 +6,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {VRFV2WrapperConsumerBase} from "@chainlink/contracts/src/v0.8/vrf/VRFV2WrapperConsumerBase.sol";
 
 import {DisputeManager} from "./DisputeManger.sol";
-import {console} from "forge-std/Test.sol";
+// import {console} from "forge-std/Test.sol";
 
 contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
     using SafeERC20 for IERC20;
@@ -259,8 +259,8 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
 
     // ------------------- VRF CALLBACK -------------------
     function fulfillRandomWords(uint256 _requestId, uint256[] memory _randomWords) internal override {
-        console.log("Request ID in the contract:", _requestId);
-        console.log("Random words:", _randomWords[0]);
+        // console.log("Request ID in the contract:", _requestId);
+        // console.log("Random words:", _randomWords[0]);
 
         if (s_requests[_requestId].paid <= 0) {
             revert JurorManager__RequestNotFound();
@@ -636,7 +636,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, DisputeManager {
         disputeVotes[_disputeId][msg.sender] = newVote;
         allDisputeVotes[_disputeId].push(newVote);
 
-        console.log("Length of all dispute votes: ", allDisputeVotes[_disputeId].length);
+        // console.log("Length of all dispute votes: ", allDisputeVotes[_disputeId].length);
 
         emit AdminParticipatedInDispute(_disputeId, _support);
     }

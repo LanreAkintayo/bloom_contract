@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 
 import {Test, console} from "forge-std/Test.sol";
-import {DeployBloom} from "../script/DeployBloom.s.sol";
+import {DeployBloom} from "../script/deploy/DeployBloom.s.sol";
 import {Bloom} from "../src/token/Bloom.sol";
 
 

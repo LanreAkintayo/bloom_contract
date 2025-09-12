@@ -6,7 +6,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IBloomEscrow} from "../../interfaces/IBloomEscrow.sol";
 import {IFeeController} from "../../interfaces/IFeeController.sol";
 
-abstract contract DisputeStorage {
+contract DisputeStorage {
     //////////////////////////
     // ENUMS
     //////////////////////////
@@ -108,7 +108,7 @@ abstract contract DisputeStorage {
 
     // Jurors
     uint256 public lockedPercentage = 7000; // 70% of the staked amount will be locked
-    uint256 public cooldownDuration = 7 days;
+    uint256 public cooldownDuration = block.chainid == 31337 ? 15 minutes : 7 days;
     mapping(address jurorAddress => Juror) public jurors;
     address[] public allJurorAddresses;
     mapping(address jurorAddress => bool) public isJurorActive;
@@ -131,7 +131,7 @@ abstract contract DisputeStorage {
     uint256 public lambda = 0.2e18; // Smoothing factor between 0 and 1 scaled by 1e18
     uint256 public k = 5; // Step size
     uint256 public noVoteK = 8; // Step size for not failing to vote
-    uint256 public votingPeriod = 48 hours;
+    uint256 public votingPeriod = block.chainid == 31337 ? 15 minutes : 48 hours;
     mapping(uint256 disputeId => address[] jurorAddresses) public disputeJurors;
     mapping(uint256 disputeId => mapping(address jurorAddress => Candidate)) public isDisputeCandidate;
     mapping(uint256 disputeId => Timer) public disputeTimer;
@@ -141,7 +141,7 @@ abstract contract DisputeStorage {
     // Appeals
     mapping(uint256 disputeId => uint256[] appeals) public disputeAppeals;
     mapping(uint256 disputeId => uint256) public appealCounts;
-    uint256 public appealDuration = 24 hours;
+    uint256 public appealDuration = block.chainid == 31337 ? 10 minutes : 24 hours;
     mapping(uint256 appealId => uint256 disputeId) public appealToDispute;
 
     // Staking rules
