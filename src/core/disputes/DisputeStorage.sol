@@ -48,7 +48,7 @@ contract DisputeStorage {
     //////////////////////////
 
     uint256 public lockedPercentage = 7000; // 70%
-    uint256 public cooldownDuration = block.chainid == 31337 ? 15 minutes : 7 days;
+    uint256 public cooldownDuration = block.chainid == 31337 ? 7 days: 15 minutes;
 
     mapping(address jurorAddress => TypesLib.Juror) public jurors;
     address[] public allJurorAddresses;
@@ -77,7 +77,7 @@ contract DisputeStorage {
     uint256 public lambda = 0.2e18; // Smoothing factor scaled by 1e18
     uint256 public k = 5;
     uint256 public noVoteK = 8;
-    uint256 public votingPeriod = block.chainid == 31337 ? 15 minutes : 48 hours;
+    uint256 public votingPeriod = block.chainid == 31337 ? 48 hours: 15 minutes;
 
     mapping(uint256 disputeId => address[] jurorAddresses) public disputeJurors;
     mapping(uint256 disputeId => mapping(address jurorAddress => TypesLib.Candidate)) public isDisputeCandidate;
@@ -93,7 +93,7 @@ contract DisputeStorage {
     mapping(uint256 disputeId => uint256) public appealCounts;
     mapping(uint256 appealId => uint256 disputeId) public appealToDispute;
 
-    uint256 public appealDuration = block.chainid == 31337 ? 10 minutes : 24 hours;
+    uint256 public appealDuration = block.chainid == 31337 ? 24 hours: 10 minutes;
 
     //////////////////////////
     // STAKING RULES
