@@ -8,11 +8,18 @@ import {IFeeController} from "../../interfaces/IFeeController.sol";
 import {TypesLib} from "../../library/TypesLib.sol";
 
 contract DisputeStorage {
-   
-
     //////////////////////////
     // STATE VARIABLES
     //////////////////////////
+
+    error DisputeStorage__ZeroAmount();
+    error DisputeStorage__NotInStandardVotingPeriod();
+    // error DisputeStorage__
+
+
+    event MinStakeAmountUpdated(uint256 minStakeAmount);
+    event MaxStakeAmountUpdated(uint256 maxStakeAmount);
+    event StandardVotingDurationExtended(uint256 disputeId, uint256 newDuration);
 
     // External contracts
     IBloomEscrow public bloomEscrow;
@@ -82,9 +89,6 @@ contract DisputeStorage {
     address public linkAddress;
     address public wrapperAddress;
 
-    uint256[] public requestIds;
-    uint256 public lastRequestId;
-
 
     function incrementDisputeId() external returns (uint256) {
         disputeId += 1;
@@ -110,17 +114,26 @@ contract DisputeStorage {
     function getDisputeJurors(uint256 _disputeId) external view returns (address[] memory) {
         return disputeJurors[_disputeId];
     }
+
+    function updateDisputeJurors(uint256 _disputeId, address[] memory _jurors) external {
+        disputeJurors[_disputeId] = _jurors;
+    }
+
     function getDisputeAppeals(uint256 _disputeId) external view returns (uint256[] memory) {
         return disputeAppeals[_disputeId];
     }
 
-    function incrementAppealCount(uint256 _disputeId) external returns(uint256) {
+    function incrementAppealCount(uint256 _disputeId) external returns (uint256) {
         appealCounts[_disputeId] += 1;
         return appealCounts[_disputeId];
     }
 
     function getDisputeTimer(uint256 _disputeId) external view returns (TypesLib.Timer memory) {
         return disputeTimer[_disputeId];
+    }
+
+    function updateDisputeTimer(uint256 _disputeId, TypesLib.Timer memory _timer) external {
+        disputeTimer[_disputeId] = _timer;
     }
 
     function pushIntoDisputeAppeals(uint256 _disputeId, uint256 _appealId) external {
@@ -135,7 +148,212 @@ contract DisputeStorage {
         return allDisputeVotes[_disputeId];
     }
 
-    function getDisputeCandidate(uint256 _disputeId, address _jurorAddress) external view returns (TypesLib.Candidate memory) {
+    function getDisputeCandidate(uint256 _disputeId, address _jurorAddress)
+        external
+        view
+        returns (TypesLib.Candidate memory)
+    {
         return isDisputeCandidate[_disputeId][_jurorAddress];
     }
+
+    function updateDisputeCandidate(uint256 _disputeId, address _jurorAddress, TypesLib.Candidate memory _candidate) external {
+        isDisputeCandidate[_disputeId][_jurorAddress] = _candidate; 
+    }
+
+    function getDisputeVote(uint256 _disputeId, address _jurorAddress) external view returns (TypesLib.Vote memory) {
+        return disputeVotes[_disputeId][_jurorAddress];
+    }
+
+    function pushIntoAllDisputeVotes(uint256 _disputeId, TypesLib.Vote memory _vote) external {
+        allDisputeVotes[_disputeId].push(_vote);
+    }
+
+    function updateDisputeVote(uint256 _disputeId, address _jurorAddress, TypesLib.Vote memory _vote) external {
+        disputeVotes[_disputeId][_jurorAddress] = _vote;
+    }
+
+    function incrementOngoingDisputeCount(address _jurorAddress) external {
+        ongoingDisputeCount[_jurorAddress] += 1;
+    }
+
+    function decrementOngoingDisputeCount(address _jurorAddress) external {
+        ongoingDisputeCount[_jurorAddress] -= 1;
+    }
+
+    function updateOngoingDisputeCount(address _jurorAddress, uint256 _count) external {
+        ongoingDisputeCount[_jurorAddress] = _count;
+    }
+
+    function updateJuror(address _jurorAddress, TypesLib.Juror memory _juror) external {
+        jurors[_jurorAddress] = _juror;
+    }
+
+    function updateJurorTokenPayments(address _jurorAddress, address _tokenAddress, uint256 _amount) external {
+        jurorTokenPayments[_jurorAddress][_tokenAddress] = _amount;
+    }
+
+    function updateDisputeToJurorPayment(uint256 _disputeId, address _jurorAddress, TypesLib.PaymentType  calldata _paymentType) external {
+        disputeToJurorPayment[_disputeId][_jurorAddress] = _paymentType;
+    }
+
+    function getJuror(address _jurorAddress) external view returns (TypesLib.Juror memory) {
+        return jurors[_jurorAddress];
+    }
+
+    function updateJurorStakeAmount(address _jurorAddress, uint256 _stakeAmount) external {
+        jurors[_jurorAddress].stakeAmount = _stakeAmount;
+    }
+
+    function updateJurorReputation(address _jurorAddress, uint256 _reputation) external {
+        jurors[_jurorAddress].reputation = _reputation;
+    }
+
+    function updateCandidateMissedStatus(uint256 _disputeId, address _jurorAddress, bool _status) external {
+        isDisputeCandidate[_disputeId][_jurorAddress].missed = _status;
+    }
+
+    function updateJurorMissedVotesCount(address _jurorAddress, uint256 _missedVotesCount) external {
+        jurors[_jurorAddress].missedVotesCount = _missedVotesCount;
+    }
+
+    function getJurorTokenPayment(address _jurorAddress, address _tokenAddress) external view returns (uint256) {
+        return jurorTokenPayments[_jurorAddress][_tokenAddress];
+    }
+
+    function getOngoingDisputeCount(address _jurorAddress) external view returns (uint256) {
+        return ongoingDisputeCount[_jurorAddress];
+    }
+
+    function updateResiduePayments(uint256 _disputeId, address _tokenAddress, uint256 _amount) external {
+        residuePayments[_disputeId][_tokenAddress] = _amount;
+    }
+
+    function getResiduePayment(uint256 _disputeId, address _tokenAddress) external view returns (uint256) {
+        return residuePayments[_disputeId][_tokenAddress];
+    }
+
+    function updateTotalResidue(address _tokenAddress, uint256 _amount) external {
+        totalResidue[_tokenAddress] = _amount;
+    }
+
+    function pushIntoDealEvidences(uint256 _dealId, address _ownerAddress, TypesLib.Evidence memory _evidence) external {
+        dealEvidences[_dealId][_ownerAddress].push(_evidence);
+    }
+
+    function removeEvidence(uint256 _evidenceIndex, uint256 _dealId, address _ownerAddress) external {
+        dealEvidences[_dealId][_ownerAddress][_evidenceIndex].removed = true;
+    }
+
+    function getDealEvidence(uint256 _dealId, address _ownerAddress) external view returns (TypesLib.Evidence[] memory) {
+        return dealEvidences[_dealId][_ownerAddress];
+    }
+
+    function popFromActiveJurorAddresses(address _jurorAddress) external {
+         uint256 lastJurorIndex = activeJurorAddresses.length - 1;
+        uint256 currentJurorIndex = jurorAddressIndex[_jurorAddress];
+
+        if (currentJurorIndex != lastJurorIndex) {
+            address lastJurorAddress = activeJurorAddresses[activeJurorAddresses.length - 1];
+
+            activeJurorAddresses[currentJurorIndex] = lastJurorAddress;
+            jurorAddressIndex[lastJurorAddress] = currentJurorIndex;
+        }
+
+        // Pop the juror address
+        activeJurorAddresses.pop();
+
+        // Clean up mapping
+        delete jurorAddressIndex[_jurorAddress];
+    }
+
+    function pushToActiveJurorAddresses(address _jurorAddress) external {
+        jurorAddressIndex[_jurorAddress] = activeJurorAddresses.length;
+        activeJurorAddresses.push(_jurorAddress);
+    }
+
+    function isInActiveJurorAddresses(address _jurorAddress) external view returns (bool) {
+        return  activeJurorAddresses[jurorAddressIndex[_jurorAddress]] == _jurorAddress;
+    }
+
+     // @complete. This is not nice like this. It's just for testing
+    function changeCallbackGasLimit(uint32 _callbackGasLimit) external  {
+        callbackGasLimit = _callbackGasLimit;
+    }
+
+    function getBloomEscrow() external view returns(IBloomEscrow){
+        return bloomEscrow;
+    }
+
+    function getFeeController() external view returns(IFeeController){
+        return feeController;
+    }
+    function getBloomToken() external view returns(IERC20){
+        return bloomToken;
+    }
+
+    function pushIntoAllJurorAddresses(address _jurorAddress) external {
+        allJurorAddresses.push(_jurorAddress);
+    }
+
+    function pushIntoJurorDisputeHistory(address _jurorAddress, uint256 _disputeId) external {
+        jurorDisputeHistory[_jurorAddress].push(_disputeId);
+    }
+
+    function getActiveJurorAddresses() external view returns (address[] memory) {
+        return activeJurorAddresses;
+    }
+
+    function extendVotingDuration(uint256 _disputeId, uint256 _duration) external {
+         disputeTimer[_disputeId].extendDuration = _duration;
+    }
+
+    function pushIntoDisputeJurors(address _jurorAddress, uint256 _disputeId) external {
+        disputeJurors[_disputeId].push(_jurorAddress);
+    }
+
+    function updateJurorLastWithdrawn(address _jurorAddress, uint256 _lastWithdrawn) external {
+        jurors[_jurorAddress].lastWithdrawn = _lastWithdrawn;
+    }
+
+       function updateMinStakeAmount(uint256 _minStakeAmount) external  {
+        if (_minStakeAmount == 0) {
+            revert DisputeStorage__ZeroAmount();
+        }
+        minStakeAmount = _minStakeAmount;
+        emit MinStakeAmountUpdated(_minStakeAmount);
+    }
+
+    
+    function updateMaxStakeAmount(uint256 _maxStakeAmount) external  {
+        if (_maxStakeAmount == 0) {
+            revert DisputeStorage__ZeroAmount();
+        }
+        maxStakeAmount = _maxStakeAmount;
+        emit MaxStakeAmountUpdated(_maxStakeAmount);
+    }
+
+    
+    function extendStandardVotingDuration(uint256 _disputeId, uint256 _extendDuration) external  {
+        TypesLib.Timer storage timer = disputeTimer[_disputeId];
+
+        if (block.timestamp > timer.startTime + timer.standardVotingDuration) {
+            revert DisputeStorage__NotInStandardVotingPeriod();
+        }
+
+        timer.standardVotingDuration = _extendDuration;
+        emit StandardVotingDurationExtended(_disputeId, _extendDuration);
+    }
+
+    function getAllJurorAddresses() external view returns (address[] memory) {
+        return allJurorAddresses;
+    }
+
+
+
+       function getJurorDisputeHistory(address _jurorAddress) external view returns (uint256[] memory) {
+        return jurorDisputeHistory[_jurorAddress];
+    }
+
+    
+
 }

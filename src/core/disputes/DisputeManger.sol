@@ -15,14 +15,13 @@ import {TypesLib} from "../../library/TypesLib.sol";
 /// @notice Handles disputes and evidence for deals in BloomEscrow
 contract DisputeManager is ConfirmedOwner {
     using SafeERC20 for IERC20;
+
     DisputeStorage public ds;
-     IBloomEscrow public bloomEscrow;
+    IBloomEscrow public bloomEscrow;
     IFeeController public feeController;
     IERC20 public bloomToken;
-    address public wrappedNative;
 
-    uint256 public MAX_PERCENT = 10_000;
-
+    uint256 public constant MAX_PERCENT = 10_000;
 
     //////////////////////////
     // ERRORS
@@ -69,13 +68,12 @@ contract DisputeManager is ConfirmedOwner {
     // CONSTRUCTOR
     //////////////////////////
 
-    constructor(address escrowAddress, address feeControllerAddress, address wrappedNativeTokenAddress, address storageAddress)
-        ConfirmedOwner(msg.sender)
-    {
-        bloomEscrow = IBloomEscrow(escrowAddress);
-        feeController = IFeeController(feeControllerAddress);
-        wrappedNative = wrappedNativeTokenAddress;
+    constructor(address storageAddress) ConfirmedOwner(msg.sender) {
+
         ds = DisputeStorage(storageAddress);
+        bloomEscrow = ds.getBloomEscrow();
+        feeController = ds.getFeeController();
+        bloomToken = ds.getBloomToken();
     }
 
     //////////////////////////
@@ -110,12 +108,12 @@ contract DisputeManager is ConfirmedOwner {
 
         // Transfer dispute fee to the contract;
         // Dispute fee is the same as the token used to create deal.
-        if (deal.tokenAddress != wrappedNative) {
+        if (deal.tokenAddress != ds.wrappedNative()) {
             IERC20 token = IERC20(deal.tokenAddress);
             token.safeTransferFrom(msg.sender, address(this), disputeFee);
         } else {
-            (bool native_success,) = msg.sender.call{value: disputeFee}("");
-            if (!native_success) {
+            (bool nativeSuccess,) = msg.sender.call{value: disputeFee}("");
+            if (!nativeSuccess) {
                 revert DisputeManager__TransferFailed();
             }
         }
@@ -133,7 +131,6 @@ contract DisputeManager is ConfirmedOwner {
             feeTokenAddress: deal.tokenAddress
         });
 
-        
         ds.setDisputes(newDisputeId, dispute);
 
         // disputes[disputeId] = dispute;
@@ -186,7 +183,7 @@ contract DisputeManager is ConfirmedOwner {
 
         // You have to ensure that the dispute has ended;
         TypesLib.Timer memory appealDisputeTimer = ds.getDisputeTimer(latestId);
-        
+
         // Timer memory appealDisputeTimer = disputeTimer[latestId];
         uint256 endTime =
             appealDisputeTimer.startTime + appealDisputeTimer.standardVotingDuration + appealDisputeTimer.extendDuration;
@@ -213,7 +210,7 @@ contract DisputeManager is ConfirmedOwner {
 
         // Transfer dispute fee to the contract;
         // Dispute fee is the same as the token used to create deal.
-        if (deal.tokenAddress != wrappedNative) {
+        if (deal.tokenAddress != ds.wrappedNative()) {
             IERC20 token = IERC20(deal.tokenAddress);
             token.safeTransferFrom(msg.sender, address(this), appealFee);
         } else {
@@ -331,11 +328,11 @@ contract DisputeManager is ConfirmedOwner {
 
         uint256 totalAmountSlashed;
         uint256 totalWinnerStakedAmount;
-        address[] memory selectedJurors = ds.getDisputeJurors(_disputeId); 
+        address[] memory selectedJurors = ds.getDisputeJurors(_disputeId);
         address[] memory winnersAlone = new address[](winnerCount);
         uint256 winnerId = 0;
         uint256 votedJurorCount = 0;
-        TypesLib.Dispute memory currentDispute = ds.getDispute(_disputeId); 
+        TypesLib.Dispute memory currentDispute = ds.getDispute(_disputeId);
         uint256 baseFee = (ds.basePercentage() * currentDispute.disputeFee) / MAX_PERCENT;
 
         // Calculate the total amount slashed from the losers
@@ -344,49 +341,67 @@ contract DisputeManager is ConfirmedOwner {
             TypesLib.Candidate memory currentCandidate = ds.getDisputeCandidate(_disputeId, selectedJurors[i]);
             address currentJurorAddress = currentCandidate.jurorAddress;
             uint256 currentStakeAmount = currentCandidate.stakeAmount;
-            Vote memory currentVote = disputeVotes[_disputeId][currentJurorAddress];
+            TypesLib.Vote memory currentVote = ds.getDisputeVote(_disputeId, currentJurorAddress);
 
-            console.log(
-                "ongoing dispute count of ", currentJurorAddress, " is ", ongoingDisputeCount[currentJurorAddress]
-            );
+            // console.log(
+            //     "ongoing dispute count of ", currentJurorAddress, " is ", ongoingDisputeCount[currentJurorAddress]
+            // );
 
             if (currentJurorAddress != owner()) {
-                ongoingDisputeCount[currentJurorAddress] -= 1;
+                ds.decrementOngoingDisputeCount(currentJurorAddress);
+                // ongoingDisputeCount[currentJurorAddress] -= 1;
             }
 
             if (currentVote.support != address(0)) {
                 votedJurorCount++;
 
                 // Share the base fee to all the voted jurors;
-                jurorTokenPayments[currentJurorAddress][currentDispute.feeTokenAddress] += baseFee;
+                ds.updateJurorTokenPayments(currentJurorAddress, currentDispute.feeTokenAddress, baseFee);
+
+                // jurorTokenPayments[currentJurorAddress][currentDispute.feeTokenAddress] += baseFee;
 
                 // Insider here, they vote either for the winner or for the loser;
                 // uint256 base
                 if (currentVote.support != winner) {
-                    // Update the disputeJurorPayment
-                    disputeToJurorPayment[_disputeId][currentJurorAddress] = PaymentType({
-                        disputeId: _disputeId,
-                        tokenAddress: currentDispute.feeTokenAddress,
-                        amount: baseFee
-                    });
+                    // Update the disputeJurorPayments
+                    ds.updateDisputeToJurorPayment(
+                        _disputeId,
+                        currentJurorAddress,
+                        TypesLib.PaymentType({
+                            disputeId: _disputeId,
+                            tokenAddress: currentDispute.feeTokenAddress,
+                            amount: baseFee
+                        })
+                    );
 
-                    uint256 amountDeducted = (currentStakeAmount * slashPercentage) / MAX_PERCENT;
+                    // disputeToJurorPayment[_disputeId][currentJurorAddress] = PaymentType({
+                    //     disputeId: _disputeId,
+                    //     tokenAddress: currentDispute.feeTokenAddress,
+                    //     amount: baseFee
+                    // });
+
+                    uint256 amountDeducted = (currentStakeAmount * ds.slashPercentage()) / MAX_PERCENT;
                     totalAmountSlashed += amountDeducted;
 
                     // console.log("amount deducted: ", amountDeducted);
 
                     if (currentCandidate.jurorAddress != owner()) {
-                        Juror storage juror = jurors[currentJurorAddress];
+                        TypesLib.Juror memory juror = ds.getJuror(currentJurorAddress);
                         // Update juror stake amount
-                        juror.stakeAmount -= amountDeducted;
+
+                        ds.updateJurorStakeAmount(currentJurorAddress, juror.stakeAmount - amountDeducted);
+                        // juror.stakeAmount -= amountDeducted;
 
                         // Update the juror reputation;
                         uint256 oldReputation = juror.reputation;
-                        int256 newReputation = int256(oldReputation) - (int256(lambda) * int256(k)) / 1e18;
+                        int256 newReputation = int256(oldReputation) - (int256(ds.lambda()) * int256(ds.k())) / 1e18;
 
                         // console.log("new reputation: ", newReputation);
 
-                        juror.reputation = newReputation > 0 ? uint256(newReputation) : 0;
+                        uint256 resolvedReputation = newReputation > 0 ? uint256(newReputation) : 0;
+
+                        ds.updateJurorReputation(currentJurorAddress, resolvedReputation);
+                        // juror.reputation = newReputation > 0 ? uint256(newReputation) : 0;
 
                         // console.log("Juror reputation: ", juror.reputation);
 
@@ -401,31 +416,39 @@ contract DisputeManager is ConfirmedOwner {
 
                 // console.log("Will it ever enter here");
 
-                uint256 deductedAmount = currentStakeAmount * noVoteSlashPercentage / MAX_PERCENT;
-                Juror storage juror = jurors[currentJurorAddress];
-                juror.stakeAmount -= deductedAmount;
+                uint256 deductedAmount = currentStakeAmount * ds.noVoteSlashPercentage() / MAX_PERCENT;
+                TypesLib.Juror memory juror = ds.getJuror(currentJurorAddress); // jurors[currentJurorAddress];
+
+                ds.updateJurorStakeAmount(currentJurorAddress, juror.stakeAmount - deductedAmount);
+                // juror.stakeAmount -= deductedAmount;
 
                 // console.log("deductedAmount: ", deductedAmount);
                 // console.log("juror.stakeAmount: ", juror.stakeAmount);
 
                 // Update the juror reputation;
                 uint256 oldReputation = juror.reputation;
-                int256 newReputation = int256(oldReputation) - (int256(lambda) * int256(noVoteK)) / 1e18;
+                int256 newReputation = int256(oldReputation) - (int256(ds.lambda()) * int256(ds.noVoteK())) / 1e18;
 
                 // console.log("New reputation: ", newReputation);
 
-                juror.reputation = newReputation > 0 ? uint256(newReputation) : 0;
+                uint256 resolvedReputation = newReputation > 0 ? uint256(newReputation) : 0;
+
+                ds.updateJurorReputation(currentJurorAddress, resolvedReputation);
+
+                // juror.reputation = newReputation > 0 ? uint256(newReputation) : 0;
 
                 // console.log("Juror reputation: ", juror.reputation);
 
-                Candidate storage candidate = isDisputeCandidate[_disputeId][currentJurorAddress];
+                TypesLib.Candidate memory candidate = ds.getDisputeCandidate(_disputeId, currentJurorAddress); // isDisputeCandidate[_disputeId][currentJurorAddress];
 
                 // Set to missed if it is not set yet.
                 if (!candidate.missed) {
-                    candidate.missed = true;
-                    juror.missedVotesCount += 1;
+                    ds.updateCandidateMissedStatus(_disputeId, currentJurorAddress, true);
+                    ds.updateJurorMissedVotesCount(currentJurorAddress, juror.missedVotesCount + 1);
+                    // candidate.missed = true;
+                    // juror.missedVotesCount += 1;
 
-                    if (juror.missedVotesCount > missedVoteThreshold) {
+                    if (juror.missedVotesCount > ds.missedVoteThreshold()) {
                         _popFromActiveJurorAddresses(currentJurorAddress);
                     }
                 }
@@ -434,7 +457,7 @@ contract DisputeManager is ConfirmedOwner {
 
         // Let's distribute to the winners;
         // Update their payments;
-        uint256 remainingPercent = MAX_PERCENT - (basePercentage * votedJurorCount);
+        uint256 remainingPercent = MAX_PERCENT - (ds.basePercentage() * votedJurorCount);
         uint256 remainingFee = remainingPercent * currentDispute.disputeFee / MAX_PERCENT;
         uint256 individualFee = remainingFee / winnersAlone.length;
         uint256 accumulatedFee = 0;
@@ -442,33 +465,48 @@ contract DisputeManager is ConfirmedOwner {
         for (uint256 i = 0; i < winnersAlone.length; i++) {
             // console.log("Distributing to winner");
             address currentAddress = winnersAlone[i];
-            Candidate memory currentCandidate = isDisputeCandidate[_disputeId][currentAddress];
+            TypesLib.Candidate memory currentCandidate = ds.getDisputeCandidate(_disputeId, currentAddress); // isDisputeCandidate[_disputeId][currentAddress];
 
             uint256 rewardAmount = (currentCandidate.stakeAmount * totalAmountSlashed) / totalWinnerStakedAmount;
 
-            Juror storage juror = jurors[currentAddress];
-            juror.stakeAmount += rewardAmount;
+            TypesLib.Juror memory juror = ds.getJuror(currentAddress); // jurors[currentAddress];
+            ds.updateJurorStakeAmount(currentAddress, juror.stakeAmount + rewardAmount);
+            // juror.stakeAmount += rewardAmount;
 
             // Update the reputation
             uint256 oldReputation = juror.reputation;
-            int256 newReputation = int256(oldReputation) + (int256(lambda) * int256(k)) / 1e18;
-            juror.reputation = newReputation > 0 ? uint256(newReputation) : 0;
+            int256 newReputation = int256(oldReputation) + (int256(ds.lambda()) * int256(ds.k())) / 1e18;
+            uint256 resolvedReputation = newReputation > 0 ? uint256(newReputation) : 0;
+            ds.updateJurorReputation(currentAddress, resolvedReputation);
+            // juror.reputation = newReputation > 0 ? uint256(newReputation) : 0;
 
             bool isPresent = isInActiveJurorAddresses(currentAddress);
 
             // // Share the base fee to all the voted jurors;
-            jurorTokenPayments[currentAddress][currentDispute.feeTokenAddress] += individualFee;
+            uint256 currentJurorPayment = ds.getJurorTokenPayment(currentAddress, currentDispute.feeTokenAddress);
+            ds.updateJurorTokenPayments(currentAddress, currentDispute.feeTokenAddress, currentJurorPayment + baseFee);
+
+            // jurorTokenPayments[currentAddress][currentDispute.feeTokenAddress] += individualFee;
 
             // Update the disputeJurorPayment
-            disputeToJurorPayment[_disputeId][currentAddress] = PaymentType({
-                disputeId: _disputeId,
-                tokenAddress: currentDispute.feeTokenAddress,
-                amount: baseFee + individualFee
-            });
+            ds.updateDisputeToJurorPayment(
+                _disputeId,
+                currentAddress,
+                TypesLib.PaymentType({
+                    disputeId: _disputeId,
+                    tokenAddress: currentDispute.feeTokenAddress,
+                    amount: baseFee + individualFee
+                })
+            );
+            // disputeToJurorPayment[_disputeId][currentAddress] = PaymentType({
+            //     disputeId: _disputeId,
+            //     tokenAddress: currentDispute.feeTokenAddress,
+            //     amount: baseFee + individualFee
+            // });
 
             accumulatedFee += individualFee;
 
-            if (ongoingDisputeCount[currentAddress] <= ongoingDisputeThreshold && !isPresent) {
+            if (ds.ongoingDisputeCount(currentAddress) <= ds.ongoingDisputeThreshold() && !isPresent) {
                 // Push back to the array of activeJurorAddresses
                 _pushToActiveJurorAddresses(currentAddress);
             }
@@ -476,27 +514,34 @@ contract DisputeManager is ConfirmedOwner {
 
         if (remainingFee > accumulatedFee) {
             uint256 residues = remainingFee - accumulatedFee;
-            residuePayments[_disputeId][currentDispute.feeTokenAddress] += residues;
-            totalResidue[currentDispute.feeTokenAddress] += residues;
+            uint256 residuePayment = ds.getResiduePayment(_disputeId, currentDispute.feeTokenAddress);
+
+            ds.updateResiduePayments(_disputeId, currentDispute.feeTokenAddress, residuePayment + residues);
+
+            // residuePayments[_disputeId][currentDispute.feeTokenAddress] += residues;
+            ds.updateTotalResidue(
+                currentDispute.feeTokenAddress, ds.totalResidue(currentDispute.feeTokenAddress) + residues
+            );
+            // totalResidue[currentDispute.feeTokenAddress] += residues;
         }
     }
 
     function releaseFundsToWinner(uint256 _disputeId) external {
         // Wait for 24 hours to see whether there will be appeal
-        uint256[] memory allDisputeAppeals = disputeAppeals[_disputeId];
+        uint256[] memory allDisputeAppeals = ds.getDisputeAppeals(_disputeId); // disputeAppeals[_disputeId];
 
         // Always make use of the last dispute which would represent the last appeal
         uint256 latestId = allDisputeAppeals.length > 0 ? allDisputeAppeals[allDisputeAppeals.length - 1] : _disputeId;
 
-        Dispute memory latestDispute = disputes[latestId];
+        TypesLib.Dispute memory latestDispute = ds.getDispute(latestId); // disputes[latestId];
 
         uint256 dealId = latestDispute.dealId;
 
-        Timer memory latestDisputeTimer = disputeTimer[latestId];
+        TypesLib.Timer memory latestDisputeTimer = ds.getDisputeTimer(latestId); // disputeTimer[latestId];
         uint256 endTime =
             latestDisputeTimer.startTime + latestDisputeTimer.standardVotingDuration + latestDisputeTimer.extendDuration;
 
-        if (block.timestamp < endTime + appealDuration) {
+        if (block.timestamp < endTime + ds.appealDuration()) {
             revert DisputeManager__AppealTime();
         }
 
@@ -511,8 +556,9 @@ contract DisputeManager is ConfirmedOwner {
     }
 
     function claimReward(address tokenAddress, uint256 amount) external {
-        uint256 reward = jurorTokenPayments[msg.sender][tokenAddress];
-        uint256 rewardClaimed = jurorTokenPaymentsClaimed[msg.sender][tokenAddress];
+        uint256 reward = ds.getJurorTokenPayment(msg.sender, tokenAddress); // jurorTokenPayments[msg.sender][tokenAddress];
+
+        uint256 rewardClaimed = ds.jurorTokenPaymentsClaimed(msg.sender, tokenAddress); //  jurorTokenPaymentsClaimed[msg.sender][tokenAddress];
         uint256 amountAvailable = reward - rewardClaimed;
 
         if (reward <= 0) {
@@ -523,7 +569,7 @@ contract DisputeManager is ConfirmedOwner {
             revert DisputeManager__NotEnoughReward();
         }
 
-        if (tokenAddress == wrappedNative) {
+        if (tokenAddress == ds.wrappedNative()) {
             (bool native_success,) = msg.sender.call{value: amount}("");
             if (!native_success) {
                 revert DisputeManager__TransferFailed();
@@ -542,9 +588,12 @@ contract DisputeManager is ConfirmedOwner {
     /// @param uri The URI of the evidence (IPFS or similar)
     /// @param evidenceType The type of evidence
     /// @param description Additional description of the evidence
-    function addEvidence(uint256 dealId, string calldata uri, TypesLib.EvidenceType evidenceType, string calldata description)
-        external
-    {
+    function addEvidence(
+        uint256 dealId,
+        string calldata uri,
+        TypesLib.EvidenceType evidenceType,
+        string calldata description
+    ) external {
         TypesLib.Deal memory deal = bloomEscrow.getDeal(dealId);
 
         // Ensure deal is currently disputed
@@ -557,7 +606,7 @@ contract DisputeManager is ConfirmedOwner {
             revert DisputeManager__NotParticipant();
         }
         uint128 timestamp = uint128(block.timestamp);
-        Evidence memory evidence = Evidence({
+        TypesLib.Evidence memory evidence = TypesLib.Evidence({
             dealId: dealId,
             uploader: msg.sender,
             uri: uri,
@@ -567,7 +616,8 @@ contract DisputeManager is ConfirmedOwner {
             removed: false
         });
 
-        dealEvidences[dealId][msg.sender].push(evidence);
+        ds.pushIntoDealEvidences(dealId, msg.sender, evidence);
+        // dealEvidences[dealId][msg.sender].push(evidence);
 
         emit EvidenceAdded(dealId, msg.sender, uri, timestamp, evidenceType, description);
     }
@@ -585,76 +635,29 @@ contract DisputeManager is ConfirmedOwner {
             revert DisputeManager__NotParticipant();
         }
 
-        Evidence[] storage evidences = dealEvidences[dealId][msg.sender];
+        TypesLib.Evidence[] memory evidences = ds.getDealEvidence(dealId, msg.sender); //dealEvidences(dealId, msg.sender); // dealEvidences[dealId][msg.sender];
 
         if (evidenceIndex >= evidences.length) {
             revert DisputeManager__CannotAddEvidence();
         }
 
-        evidences[evidenceIndex].removed = true;
+        ds.removeEvidence(evidenceIndex, dealId, msg.sender);
+
+        // evidences[evidenceIndex].removed = true;
 
         // Note: No event emitted for evidence removal to maintain evidence integrity
     }
 
     function _popFromActiveJurorAddresses(address jurorAddress) internal {
-        uint256 lastJurorIndex = activeJurorAddresses.length - 1;
-        uint256 currentJurorIndex = jurorAddressIndex[jurorAddress];
-
-        if (currentJurorIndex != lastJurorIndex) {
-            address lastJurorAddress = activeJurorAddresses[activeJurorAddresses.length - 1];
-
-            activeJurorAddresses[currentJurorIndex] = lastJurorAddress;
-            jurorAddressIndex[lastJurorAddress] = currentJurorIndex;
-        }
-
-        // Pop the juror address
-        activeJurorAddresses.pop();
-
-        // Clean up mapping
-        delete jurorAddressIndex[jurorAddress];
+        ds.popFromActiveJurorAddresses(jurorAddress);
     }
 
     function _pushToActiveJurorAddresses(address jurorAddress) internal {
-        // Add a new fresh juror to the activejurorAddresses
-        jurorAddressIndex[jurorAddress] = activeJurorAddresses.length;
-        activeJurorAddresses.push(jurorAddress);
+        ds.pushToActiveJurorAddresses(jurorAddress);
     }
 
     function isInActiveJurorAddresses(address _jurorAddress) internal view returns (bool) {
-        return activeJurorAddresses[jurorAddressIndex[_jurorAddress]] == _jurorAddress;
-    }
-
-    // @complete. This is not nice like this. It's just for testing
-    function changeCallbackGasLimit(uint32 _callbackGasLimit) external onlyOwner {
-        callbackGasLimit = _callbackGasLimit;
-
-    }
-
-    function getDispute(uint256 _disputeId) external view returns (TypesLib.Dispute memory) {
-        return disputes[_disputeId];
-    }
-
-    function getDisputeCandidate(uint256 _disputeId, address _jurorAddress) external view returns (TypesLib.Candidate memory) {
-        return isDisputeCandidate[_disputeId][_jurorAddress];
-    }
-
-    function getDisputeVote(uint256 _disputeId, address _jurorAddress) external view returns (TypesLib.Vote memory) {
-        return disputeVotes[_disputeId][_jurorAddress];
-    }
-
-    function getDisputeVotes(uint256 _disputeId) external view returns (TypesLib.Vote[] memory) {
-        return allDisputeVotes[_disputeId];
-    }
-
-    function getDisputeTimer(uint256 _disputeId) external view returns (TypesLib.Timer memory) {
-        return disputeTimer[_disputeId];
-    }
-
-    function getDisputeAppeals(uint256 _disputeId) external view returns (uint256[] memory) {
-        return disputeAppeals[_disputeId];
-    }
-
-    function getDisputeAppealCount(uint256 _disputeId) external view returns (uint256) {
-        return appealCounts[_disputeId];
+        // return ds.activeJurorAddresses(jurorAddressIndex(_jurorAddress))
+        return ds.isInActiveJurorAddresses(_jurorAddress);
     }
 }

@@ -18,82 +18,82 @@ import {JurorManager} from "../src/core/disputes/JurorManager.sol";
 import {HelperConfig} from "../script/HelperConfig.s.sol";
 
 contract BaseJuror is Test {
-    // Deploy scripts
-    DeployBloom deployBloom;
-    DeployBloomEscrow deployBloomEscrow;
-    DeployFeeController deployFeeController;
-    DeployJurorManager deployJurorManager;
+    // // Deploy scripts
+    // DeployBloom deployBloom;
+    // DeployBloomEscrow deployBloomEscrow;
+    // DeployFeeController deployFeeController;
+    // DeployJurorManager deployJurorManager;
 
-    // Core contracts
-    Bloom bloom;
-    BloomEscrow bloomEscrow;
-    FeeController feeController;
-    JurorManager jurorManager;
+    // // Core contracts
+    // Bloom bloom;
+    // BloomEscrow bloomEscrow;
+    // FeeController feeController;
+    // JurorManager jurorManager;
 
-    // Config
-    HelperConfig helperConfig;
-    HelperConfig.NetworkConfig networkConfig;
+    // // Config
+    // HelperConfig helperConfig;
+    // HelperConfig.NetworkConfig networkConfig;
 
-    // Test actors
-    address sender;
-    address receiver;
+    // // Test actors
+    // address sender;
+    // address receiver;
 
-    function setUp() public virtual {
-        // Deploy Bloom
-        deployBloom = new DeployBloom();
-        (bloom, helperConfig) = deployBloom.run();
-        networkConfig = helperConfig.getConfigByChainId(block.chainid);
+    // function setUp() public virtual {
+    //     // Deploy Bloom
+    //     deployBloom = new DeployBloom();
+    //     (bloom, helperConfig) = deployBloom.run();
+    //     networkConfig = helperConfig.getConfigByChainId(block.chainid);
 
-        // Deploy FeeController
-        deployFeeController = new DeployFeeController();
-        (feeController, ) = deployFeeController.run();
+    //     // Deploy FeeController
+    //     deployFeeController = new DeployFeeController();
+    //     (feeController, ) = deployFeeController.run();
 
-        // Deploy BloomEscrow
-        deployBloomEscrow = new DeployBloomEscrow();
-        (bloomEscrow, ) = deployBloomEscrow.run();
+    //     // Deploy BloomEscrow
+    //     deployBloomEscrow = new DeployBloomEscrow();
+    //     (bloomEscrow, ) = deployBloomEscrow.run();
 
-        // Deploy JurorManager
-        deployJurorManager = new DeployJurorManager();
-        (jurorManager, ) = deployJurorManager.deploy(
-            address(bloom),
-            networkConfig.linkAddress,
-            networkConfig.wrapperAddress,
-            address(bloomEscrow),
-            address(feeController),
-            networkConfig.wrappedNativeTokenAddress,
-            helperConfig
-        );
+    //     // Deploy JurorManager
+    //     deployJurorManager = new DeployJurorManager();
+    //     (jurorManager, ) = deployJurorManager.deploy(
+    //         address(bloom),
+    //         networkConfig.linkAddress,
+    //         networkConfig.wrapperAddress,
+    //         address(bloomEscrow),
+    //         address(feeController),
+    //         networkConfig.wrappedNativeTokenAddress,
+    //         helperConfig
+    //     );
 
-        // Link FeeController and dispute manager to BloomEscrow
-        vm.startPrank(bloomEscrow.owner());
+    //     // Link FeeController and dispute manager to BloomEscrow
+    //     vm.startPrank(bloomEscrow.owner());
 
-        // console .log("Fee controller address: ", address(feeController));
-        // console.log("Juror manager address: ", address(jurorManager));
-        // console.log("usdcTokenAddress: ", networkConfig.usdcTokenAddress);
-        // console.log("daiTokenAddress: ", networkConfig.daiTokenAddress);
-        // console.log("wethTokenAddress: ", networkConfig.wethTokenAddress);
+    //     // console .log("Fee controller address: ", address(feeController));
+    //     // console.log("Juror manager address: ", address(jurorManager));
+    //     // console.log("usdcTokenAddress: ", networkConfig.usdcTokenAddress);
+    //     // console.log("daiTokenAddress: ", networkConfig.daiTokenAddress);
+    //     // console.log("wethTokenAddress: ", networkConfig.wethTokenAddress);
 
 
-        bloomEscrow.addFeeController(address(feeController));
-        bloomEscrow.addDisputeManager(address(jurorManager));
+    //     bloomEscrow.addFeeController(address(feeController));
+    //     bloomEscrow.addDisputeManager(address(jurorManager));
 
-        bloomEscrow.addToken(networkConfig.usdcTokenAddress);
-        bloomEscrow.addToken(networkConfig.daiTokenAddress);
-        bloomEscrow.addToken(networkConfig.wethTokenAddress);
+    //     bloomEscrow.addToken(networkConfig.usdcTokenAddress);
+    //     bloomEscrow.addToken(networkConfig.daiTokenAddress);
+    //     bloomEscrow.addToken(networkConfig.wethTokenAddress);
         
-        vm.stopPrank();
+    //     vm.stopPrank();
 
-        // Configure FeeController
-        vm.startPrank(feeController.owner());
-        feeController.addToDataFeed(networkConfig.usdcTokenAddress, networkConfig.usdcUsdPriceFeed);
-        feeController.addToDataFeed(networkConfig.daiTokenAddress, networkConfig.daiUsdPriceFeed);
-        feeController.addToDataFeed(networkConfig.wethTokenAddress, networkConfig.ethUsdPriceFeed);
-        vm.stopPrank();
+    //     // Configure FeeController
+    //     vm.startPrank(feeController.owner());
+    //     feeController.addToDataFeed(networkConfig.usdcTokenAddress, networkConfig.usdcUsdPriceFeed);
+    //     feeController.addToDataFeed(networkConfig.daiTokenAddress, networkConfig.daiUsdPriceFeed);
+    //     feeController.addToDataFeed(networkConfig.wethTokenAddress, networkConfig.ethUsdPriceFeed);
+    //     vm.stopPrank();
 
         
 
-        // 8. Test actors
-        sender = makeAddr("sender");
-        receiver = makeAddr("receiver");
-    }
+    //     // 8. Test actors
+    //     sender = makeAddr("sender");
+    //     receiver = makeAddr("receiver");
+    // }
 }

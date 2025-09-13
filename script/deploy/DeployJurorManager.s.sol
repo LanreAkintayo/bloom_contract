@@ -50,10 +50,10 @@ contract DeployJurorManager is Script {
         JurorManager jurorManager = new JurorManager(
             bloomTokenAddress,
             linkAddress,
-            wrapperAddress,
-            escrowAddress,
-            feeControllerAddress,
-            wrappedNativeTokenAddress
+            wrapperAddress
+            // escrowAddress,
+            // feeControllerAddress,
+            // wrappedNativeTokenAddress
         );
 
         vm.stopBroadcast();
