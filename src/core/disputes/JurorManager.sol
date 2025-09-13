@@ -6,7 +6,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {VRFV2WrapperConsumerBase} from "@chainlink/contracts/src/v0.8/vrf/VRFV2WrapperConsumerBase.sol";
 import {DisputeStorage} from "./DisputeStorage.sol";
 
-import {DisputeManager} from "./DisputeManger.sol";
+import {DisputeManager} from "./DisputeManager.sol";
 import {TypesLib} from "../../library/TypesLib.sol";
 import {ConfirmedOwner} from "@chainlink/contracts/src/v0.8/shared/access/ConfirmedOwner.sol";
 
@@ -76,10 +76,11 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner {
     /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
-    constructor(address _bloomTokenAddress, address _linkAddress, address _wrapperAddress)
+    constructor(address _storageAddress, address _bloomTokenAddress, address _linkAddress, address _wrapperAddress)
         VRFV2WrapperConsumerBase(_linkAddress, _wrapperAddress)
         ConfirmedOwner(msg.sender)
-    {
+    {   
+        ds = DisputeStorage(_storageAddress);
         bloomToken = ds.getBloomToken();
     }
 

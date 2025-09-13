@@ -14,61 +14,61 @@ import {DisputeStorage} from "../src/core/disputes/DisputeStorage.sol";
 import {LinkToken} from "@chainlink/contracts/src/v0.8/shared/token/ERC677/LinkToken.sol";
 import {VRFCoordinatorV2Mock} from "@chainlink/contracts/src/v0.8/vrf/mocks/VRFCoordinatorV2Mock.sol";
 import {VRFV2Wrapper} from "@chainlink/contracts/src/v0.8/vrf/VRFV2Wrapper.sol";
-import {DisputeManager} from "../src/core/disputes/DisputeManger.sol";
+import {DisputeManager} from "../src/core/disputes/DisputeManager.sol";
 
 contract JurorManagerTest is BaseJuror {
     // ------------------------
     // Helper functions
     // ------------------------
 
-    // function _createERC20Deal(address _sender, address _receiver, address tokenAddress, uint256 amount)
-    //     internal
-    //     returns (uint256 dealId)
-    // {
-    //     uint256 escrowFee = feeController.calculateEscrowFee(amount);
-    //     uint256 totalAmount = amount + escrowFee;
+    function _createERC20Deal(address _sender, address _receiver, address tokenAddress, uint256 amount)
+        internal
+        returns (uint256 dealId)
+    {
+        uint256 escrowFee = feeController.calculateEscrowFee(amount);
+        uint256 totalAmount = amount + escrowFee;
 
-    //     IERC20Mock token = IERC20Mock(tokenAddress);
-    //     vm.prank(address(helperConfig));
-    //     token.mint(_sender, 1_000_000e18);
+        IERC20Mock token = IERC20Mock(tokenAddress);
+        vm.prank(address(helperConfig));
+        token.mint(_sender, 1_000_000e18);
 
-    //     vm.startPrank(_sender);
-    //     token.approve(address(bloomEscrow), totalAmount);
-    //     bloomEscrow.createDeal(_sender, _receiver, tokenAddress, amount);
-    //     vm.stopPrank();
+        vm.startPrank(_sender);
+        token.approve(address(bloomEscrow), totalAmount);
+        bloomEscrow.createDeal(_sender, _receiver, tokenAddress, amount);
+        vm.stopPrank();
 
-    //     return bloomEscrow.dealCount() - 1;
-    // }
+        return bloomEscrow.dealCount() - 1;
+    }
 
-    // function _createETHDeal(address _sender, address _receiver, uint256 amount) internal returns (uint256 dealId) {
-    //     uint256 escrowFee = feeController.calculateEscrowFee(amount);
-    //     uint256 totalAmount = amount + escrowFee;
+    function _createETHDeal(address _sender, address _receiver, uint256 amount) internal returns (uint256 dealId) {
+        uint256 escrowFee = feeController.calculateEscrowFee(amount);
+        uint256 totalAmount = amount + escrowFee;
 
-    //     vm.deal(_sender, 100 ether);
+        vm.deal(_sender, 100 ether);
 
-    //     vm.startPrank(_sender);
-    //     bloomEscrow.createDeal{value: totalAmount}(_sender, _receiver, address(0), amount);
-    //     vm.stopPrank();
+        vm.startPrank(_sender);
+        bloomEscrow.createDeal{value: totalAmount}(_sender, _receiver, address(0), amount);
+        vm.stopPrank();
 
-    //     return bloomEscrow.dealCount() - 1;
-    // }
+        return bloomEscrow.dealCount() - 1;
+    }
 
-    // function _openDispute(address _sender, uint256 dealId) internal returns (uint256) {
-    //     TypesLib.Deal memory deal = bloomEscrow.getDeal(dealId);
+    function _openDispute(address _sender, uint256 dealId) internal returns (uint256) {
+        TypesLib.Deal memory deal = bloomEscrow.getDeal(dealId);
 
-    //     address tokenAddress = deal.tokenAddress;
-    //     IERC20Mock token = IERC20Mock(tokenAddress);
-    //     uint256 dealAmount = deal.amount;
-    //     uint256 disputeFee = feeController.calculateDisputeFee(dealAmount);
+        address tokenAddress = deal.tokenAddress;
+        IERC20Mock token = IERC20Mock(tokenAddress);
+        uint256 dealAmount = deal.amount;
+        uint256 disputeFee = feeController.calculateDisputeFee(dealAmount);
 
-    //     vm.startPrank(_sender);
-    //     token.approve(address(jurorManager), disputeFee);
-    //     jurorManager.openDispute(dealId);
-    //     vm.stopPrank();
+        vm.startPrank(_sender);
+        token.approve(address(disputeManager), disputeFee);
+        disputeManager.openDispute(dealId);
+        vm.stopPrank();
 
-    //     uint256 disputeId = jurorManager.dealToDispute(dealId);
-    //     return disputeId;
-    // }
+        uint256 disputeId = disputeStorage.dealToDispute(dealId);
+        return disputeId;
+    }
 
     // function _selectJurors(uint256 _disputeId, uint256 expNeeded, uint256 newbieNeeded) internal {
     //     uint256 thresholdFP;
@@ -219,25 +219,25 @@ contract JurorManagerTest is BaseJuror {
     //     assert(address(jurorManager) != address(0));
     // }
 
-    // function testOpenDispute() external {
-    //     // //  You should not be able to open dispute if you haven't create a deal in the first place
+    function testOpenDispute() external {
+        // //  You should not be able to open dispute if you haven't create a deal in the first place
 
-    //     // Create a deal;
-    //     address daiTokenAddress = networkConfig.daiTokenAddress;
-    //     uint256 dealAmount = 100e18;
-    //     uint256 dealId = _createERC20Deal(sender, receiver, daiTokenAddress, dealAmount);
+        // Create a deal;
+        address daiTokenAddress = networkConfig.daiTokenAddress;
+        uint256 dealAmount = 100e18;
+        uint256 dealId = _createERC20Deal(sender, receiver, daiTokenAddress, dealAmount);
 
-    //     // Then you should be able to open a dispute;
-    //     uint256 disputeId = _openDispute(sender, dealId);
+        // Then you should be able to open a dispute;
+        uint256 disputeId = _openDispute(sender, dealId);
 
-    //     // Then check the states;
-    //     // DisputeStorage.Dispute memory dispute = jurorManager.disputes(disputeId);
-    //     // assert(dispute.initiator == sender);
-    //     // assert(dispute.dealId == dealId);
-    //     // assert(dispute.sender == sender);
-    //     // assert(dispute.receiver == receiver);
-    //     // assert(dispute.winner == address(0));
-    // }
+        // Then check the states;
+        // DisputeStorage.Dispute memory dispute = jurorManager.disputes(disputeId);
+        // assert(dispute.initiator == sender);
+        // assert(dispute.dealId == dealId);
+        // assert(dispute.sender == sender);
+        // assert(dispute.receiver == receiver);
+        // assert(dispute.winner == address(0));
+    }
 
     // function testShouldRegisterJuror() external {
     //     // You should be able to register a juror

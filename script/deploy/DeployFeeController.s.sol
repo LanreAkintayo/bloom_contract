@@ -21,23 +21,26 @@ contract DeployFeeController is Script {
         HelperConfig.NetworkConfig memory networkConfig = helperConfig.getConfigByChainId(block.chainid);
 
         address deployer;
+        FeeController feeController;
 
         if (block.chainid == 31337) {
             // Local Anvil network
             deployer = msg.sender; // first default account
             vm.startBroadcast(); // uses Anvil default
+
+            feeController = new FeeController(escrowFeePercentage, disputeFeePercentage, minimumAppealFee);
         } else {
             // Any testnet/mainnet
             uint256 deployerKey = vm.envUint("PRIVATE_KEY");
             deployer = vm.addr(deployerKey);
             vm.startBroadcast(deployerKey);
+
+            feeController = new FeeController(escrowFeePercentage, disputeFeePercentage, minimumAppealFee);
+
+            feeController.addToDataFeed(networkConfig.usdcTokenAddress, networkConfig.usdcUsdPriceFeed);
+            feeController.addToDataFeed(networkConfig.daiTokenAddress, networkConfig.daiUsdPriceFeed);
+            feeController.addToDataFeed(networkConfig.wethTokenAddress, networkConfig.ethUsdPriceFeed);
         }
-
-        FeeController feeController = new FeeController(escrowFeePercentage, disputeFeePercentage, minimumAppealFee);
-
-        feeController.addToDataFeed(networkConfig.usdcTokenAddress, networkConfig.usdcUsdPriceFeed);
-        feeController.addToDataFeed(networkConfig.daiTokenAddress, networkConfig.daiUsdPriceFeed);
-        feeController.addToDataFeed(networkConfig.wethTokenAddress, networkConfig.ethUsdPriceFeed);
 
         vm.stopBroadcast();
 

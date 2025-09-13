@@ -70,4 +70,19 @@ library DeployedAddresses {
         }
         revert("No FeeController deployment found for this network");
     }
+     // ---------------- Dispute Storage ----------------
+     function getDisputeStorage(uint256 chainId, uint256 index) internal pure returns (address) {
+        if (chainId == 11155111) {
+            if (index == 0) return address(0);
+            // Add more deployments here
+        }
+        revert("Dispute storage deployment not found for this index");
+    }
+
+    function getLastDisputeStorage(uint256 chainId) internal pure returns (address) {
+        if (chainId == 11155111) {
+            return address(0); // latest deployment
+        }
+        revert("No Dispute storage deployment found for this network");
+    }
 }

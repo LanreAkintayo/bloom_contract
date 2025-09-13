@@ -5,34 +5,35 @@ import {Script} from "forge-std/Script.sol";
 import {JurorManager} from "../../src/core/disputes/JurorManager.sol";
 import {HelperConfig} from "../HelperConfig.s.sol";
 import {DeployedAddresses} from "./DeployedAddresses.sol";
+import {DisputeStorage} from "../../src/core/disputes/DisputeStorage.sol";
 
-contract DeployJurorManager is Script {
-    function run() external returns (JurorManager, HelperConfig) {
+contract DeployDisputeStorage is Script {
+    function run() external returns (DisputeStorage, HelperConfig) {
         HelperConfig helperConfig = new HelperConfig();
         HelperConfig.NetworkConfig memory networkConfig = helperConfig.getConfigByChainId(block.chainid);
 
         // Pick addresses automatically if zero
-        address storageAddress = DeployedAddresses.getLastDisputeStorage(block.chainid);
         address bloomTokenAddress = DeployedAddresses.getLastBloom(block.chainid);
-        address linkAddress = networkConfig.linkAddress;
-        address wrapperAddress = networkConfig.wrapperAddress;
-        
-        return deploy(
-            storageAddress,
+        address escrowAddress = DeployedAddresses.getLastBloomEscrow(block.chainid);
+        address feeControllerAddress = DeployedAddresses.getLastFeeController(block.chainid);
+        address wrappedNativeTokenAddress = networkConfig.wrappedNativeTokenAddress;
+
+        return deploy(            
+            escrowAddress,
+            feeControllerAddress,
             bloomTokenAddress,
-            linkAddress,
-            wrapperAddress,
+            wrappedNativeTokenAddress,
             helperConfig
         );
     }
 
     function deploy(
-        address storageAddress,
+        address escrowAddress,
+        address feeControllerAddress,
         address bloomTokenAddress,
-        address linkAddress,
-        address wrapperAddress,
+        address wrappedNativeTokenAddress,
         HelperConfig helperConfig
-    ) public returns (JurorManager, HelperConfig) {
+    ) public returns (DisputeStorage, HelperConfig) {
         uint256 deployerKey;
         if (block.chainid == 31337) {
             vm.startBroadcast(); // Anvil default
@@ -41,17 +42,14 @@ contract DeployJurorManager is Script {
             vm.startBroadcast(deployerKey);
         }
 
-        JurorManager jurorManager = new JurorManager(
-            storageAddress,
+        DisputeStorage disputeStorage = new DisputeStorage(
+            escrowAddress,
+            feeControllerAddress,
             bloomTokenAddress,
-            linkAddress,
-            wrapperAddress
-            // escrowAddress,
-            // feeControllerAddress,
-            // wrappedNativeTokenAddress
+            wrappedNativeTokenAddress
         );
 
         vm.stopBroadcast();
-        return (jurorManager, helperConfig);
+        return (disputeStorage, helperConfig);
     }
 }
