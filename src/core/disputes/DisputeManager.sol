@@ -8,7 +8,7 @@ import {IBloomEscrow} from "../../interfaces/IBloomEscrow.sol";
 import {IFeeController} from "../../interfaces/IFeeController.sol";
 import {ConfirmedOwner} from "@chainlink/contracts/src/v0.8/shared/access/ConfirmedOwner.sol";
 import {DisputeStorage} from "./DisputeStorage.sol";
-import {console} from "forge-std/Test.sol";
+// import {console} from "forge-std/Test.sol";
 import {TypesLib} from "../../library/TypesLib.sol";
 
 /// @title Dispute Manager for Bloom Escrow
@@ -44,6 +44,7 @@ contract DisputeManager is ConfirmedOwner {
     error DisputeManager__AlreadyFinished();
     error DisputeManager__NoReward();
     error DisputeManager__NotEnoughReward();
+    error DisputeManager__DisputeNotEnded();
 
     //////////////////////////
     // EVENTS
@@ -63,13 +64,14 @@ contract DisputeManager is ConfirmedOwner {
     event DisputeFinished(uint256 _disputeId, address winner, address loser, uint256 winnerCount, uint256 loserCount);
     event FundsReleasedToWinner(uint256 _disputeId, address winner);
     event RewardClaimed(address jurorAddress, address tokenAddress, uint256 amount);
+    event AdminParticipatedInDispute(uint256 indexed _disputeId, address indexed support);
+
 
     //////////////////////////
     // CONSTRUCTOR
     //////////////////////////
 
     constructor(address storageAddress) ConfirmedOwner(msg.sender) {
-
         ds = DisputeStorage(storageAddress);
         bloomEscrow = ds.getBloomEscrow();
         feeController = ds.getFeeController();
@@ -250,6 +252,70 @@ contract DisputeManager is ConfirmedOwner {
         return newDisputeId;
     }
 
+    
+    function adminParticipateInDispute(uint256 _disputeId, address _support) external onlyOwner {
+        // @complete - don't forget to remove that missed updater here. It's not supposed to be done here
+        // To be called by admins
+        // Admin is added as candidate. This will be called only after the voting period has elapsed
+        TypesLib.Timer memory timer = ds.getDisputeTimer(_disputeId); // disputeTimer[_disputeId];
+        if (block.timestamp < timer.startTime + timer.standardVotingDuration + timer.extendDuration) {
+            revert DisputeManager__DisputeNotEnded();
+        }
+
+        // Admin will be added to the candidate list
+        // address[] storage selectedJurors = disputeJurors[_disputeId];
+
+        // Mark all the jurors that did not vote as missed;
+        // for (uint256 i = 0; i < selectedJurors.length; i++) {
+        //     address jurorAddress = selectedJurors[i];
+        //     if (disputeVotes[_disputeId][jurorAddress].support == address(0)) {
+        //         isDisputeCandidate[_disputeId][jurorAddress].missed = true;
+        //     }
+        // }
+
+        // Add admin as juror
+        ds.pushIntoDisputeJurors(owner(), _disputeId);
+
+        // selectedJurors.push(owner());
+
+        ds.updateDisputeCandidate(
+            _disputeId,
+            owner(),
+            TypesLib.Candidate({
+                jurorAddress: owner(),
+                stakeAmount: 0,
+                disputeId: _disputeId,
+                reputation: 0,
+                score: 0,
+                missed: false
+            })
+        );
+
+        // isDisputeCandidate[_disputeId][owner()] = Candidate({
+        //     jurorAddress: owner(),
+        //     stakeAmount: 0,
+        //     disputeId: _disputeId,
+        //     reputation: 0,
+        //     score: 0,
+        //     missed: false
+        // });
+
+        // Then you vote
+        uint256 correspondingDealId = ds.getDispute(_disputeId).dealId; // disputes[_disputeId].dealId;
+
+        TypesLib.Vote memory newVote = TypesLib.Vote(owner(), _disputeId, correspondingDealId, _support);
+
+        ds.updateDisputeVote(_disputeId, msg.sender, newVote);
+        // disputeVotes[_disputeId][msg.sender] = newVote;
+
+        ds.pushIntoAllDisputeVotes(_disputeId, newVote);
+        // allDisputeVotes[_disputeId].push(newVote);
+
+        // console.log("Length of all dispute votes: ", allDisputeVotes[_disputeId].length);
+
+        emit AdminParticipatedInDispute(_disputeId, _support);
+    }
+
     function finishDispute(uint256 _disputeId) external onlyOwner {
         // Check if voting time has elapsed;
         TypesLib.Timer memory appealDisputeTimer = ds.getDisputeTimer(_disputeId);
@@ -347,8 +413,13 @@ contract DisputeManager is ConfirmedOwner {
             //     "ongoing dispute count of ", currentJurorAddress, " is ", ongoingDisputeCount[currentJurorAddress]
             // );
 
+            // console.log("Current juror address: ", currentJurorAddress, "and ongoing disputes: ", ds.ongoingDisputeCount(currentJurorAddress));
+            // console.log("Owner: ", owner(), "and ongoing dispute count is: ", ds.ongoingDisputeCount(currentJurorAddress));
+
+
             if (currentJurorAddress != owner()) {
-                ds.decrementOngoingDisputeCount(currentJurorAddress);
+                ds.updateOngoingDisputeCount(currentJurorAddress, ds.ongoingDisputeCount(currentJurorAddress) - 1);
+                // ds.decrementOngoingDisputeCount(currentJurorAddress);
                 // ongoingDisputeCount[currentJurorAddress] -= 1;
             }
 

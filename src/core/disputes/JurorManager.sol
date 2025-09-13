@@ -10,7 +10,7 @@ import {DisputeManager} from "./DisputeManager.sol";
 import {TypesLib} from "../../library/TypesLib.sol";
 import {ConfirmedOwner} from "@chainlink/contracts/src/v0.8/shared/access/ConfirmedOwner.sol";
 
-// import {console} from "forge-std/Test.sol";
+import {console} from "forge-std/Test.sol";
 
 contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner {
     using SafeERC20 for IERC20;
@@ -68,7 +68,6 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner {
     event RequestSent(uint256 requestId, uint32 numWords);
     event RequestFulfilled(uint256 requestId, uint256[] randomWords, uint256 payment);
     event Voted(uint256 indexed disputeId, address indexed jurorAddress, address indexed support);
-    event AdminParticipatedInDispute(uint256 indexed _disputeId, address indexed support);
     event JurorAdded(uint256 indexed _disputeId, address[] indexed newJurors);
     event StandardVotingDurationExtended(uint256 indexed _disputeId, uint256 indexed _extendDuration);
     event StakeWithdrawn(address indexed jurorAddress, uint256 indexed amount);
@@ -79,7 +78,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner {
     constructor(address _storageAddress, address _bloomTokenAddress, address _linkAddress, address _wrapperAddress)
         VRFV2WrapperConsumerBase(_linkAddress, _wrapperAddress)
         ConfirmedOwner(msg.sender)
-    {   
+    {
         ds = DisputeStorage(_storageAddress);
         bloomToken = ds.getBloomToken();
     }
@@ -386,8 +385,17 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner {
         for (uint256 i = 0; i < selected.length; i++) {
             address selectedAddress = selected[i];
             uint256 ongoingDisputeCount = ds.ongoingDisputeCount(selectedAddress);
+
+            console.log("Ongoing dispute count before incrementing ", selectedAddress, " is ", ongoingDisputeCount);
+
             ds.updateOngoingDisputeCount(selectedAddress, ongoingDisputeCount + 1);
 
+            console.log(
+                "Ongoing dispute count after getting selectied ",
+                selectedAddress,
+                " is ",
+                ds.ongoingDisputeCount(selectedAddress)
+            );
             // ongoingDisputeCounFt[selectedAddress] += 1;
 
             bool isPresent = ds.isInActiveJurorAddresses(selectedAddress);
@@ -666,68 +674,6 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner {
         return eligibleAddresses;
     }
 
-    function adminParticipateInDispute(uint256 _disputeId, address _support) external onlyOwner {
-        // @complete - don't forget to remove that missed updater here. It's not supposed to be done here
-        // To be called by admins
-        // Admin is added as candidate. This will be called only after the voting period has elapsed
-        TypesLib.Timer memory timer = ds.getDisputeTimer(_disputeId); // disputeTimer[_disputeId];
-        if (block.timestamp < timer.startTime + timer.standardVotingDuration + timer.extendDuration) {
-            revert JurorManager__DisputeNotEnded();
-        }
-
-        // Admin will be added to the candidate list
-        // address[] storage selectedJurors = disputeJurors[_disputeId];
-
-        // Mark all the jurors that did not vote as missed;
-        // for (uint256 i = 0; i < selectedJurors.length; i++) {
-        //     address jurorAddress = selectedJurors[i];
-        //     if (disputeVotes[_disputeId][jurorAddress].support == address(0)) {
-        //         isDisputeCandidate[_disputeId][jurorAddress].missed = true;
-        //     }
-        // }
-
-        // Add admin as juror
-        ds.pushIntoDisputeJurors(owner(), _disputeId);
-
-        // selectedJurors.push(owner());
-
-        ds.updateDisputeCandidate(
-            _disputeId,
-            owner(),
-            TypesLib.Candidate({
-                jurorAddress: owner(),
-                stakeAmount: 0,
-                disputeId: _disputeId,
-                reputation: 0,
-                score: 0,
-                missed: false
-            })
-        );
-
-        // isDisputeCandidate[_disputeId][owner()] = Candidate({
-        //     jurorAddress: owner(),
-        //     stakeAmount: 0,
-        //     disputeId: _disputeId,
-        //     reputation: 0,
-        //     score: 0,
-        //     missed: false
-        // });
-
-        // Then you vote
-        uint256 correspondingDealId = ds.getDispute(_disputeId).dealId; // disputes[_disputeId].dealId;
-
-        TypesLib.Vote memory newVote = TypesLib.Vote(owner(), _disputeId, correspondingDealId, _support);
-
-        ds.updateDisputeVote(_disputeId, msg.sender, newVote);
-        // disputeVotes[_disputeId][msg.sender] = newVote;
-
-        ds.pushIntoAllDisputeVotes(_disputeId, newVote);
-        // allDisputeVotes[_disputeId].push(newVote);
-
-        // console.log("Length of all dispute votes: ", allDisputeVotes[_disputeId].length);
-
-        emit AdminParticipatedInDispute(_disputeId, _support);
-    }
 
     function withdrawStake(uint256 _stakeAmount) external {
         TypesLib.Juror memory juror = ds.getJuror(msg.sender); // jurors[msg.sender];

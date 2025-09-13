@@ -835,8 +835,8 @@ contract JurorManagerTest is BaseJuror {
         vm.warp(block.timestamp + disputeStorage.votingPeriod());
 
         // // Admin comes in to vote.
-        vm.prank(jurorManager.owner());
-        jurorManager.adminParticipateInDispute(appealId2, sender);
+        vm.prank(disputeManager.owner());
+        disputeManager.adminParticipateInDispute(appealId2, sender);
 
         // Dispute finishes
         vm.warp(block.timestamp + disputeStorage.votingPeriod());
@@ -947,8 +947,8 @@ contract JurorManagerTest is BaseJuror {
         vm.warp(block.timestamp + disputeStorage.votingPeriod());
 
         // Admin comes in to vote.
-        vm.prank(jurorManager.owner());
-        jurorManager.adminParticipateInDispute(appealId2, receiver);
+        vm.prank(disputeManager.owner());
+        disputeManager.adminParticipateInDispute(appealId2, receiver);
 
 
         // Check the dispute fee of some winner;
@@ -967,7 +967,7 @@ contract JurorManagerTest is BaseJuror {
         // Winner claims funds
         vm.warp(block.timestamp + disputeStorage.appealDuration());
 
-        JurorManager.Dispute memory finalDispute = disputeStorage.getDispute(appealId2);
+        TypesLib.Dispute memory finalDispute = disputeStorage.getDispute(appealId2);
         address newWinner = finalDispute.winner;
 
         assertEq(newWinner, receiver);
@@ -975,7 +975,7 @@ contract JurorManagerTest is BaseJuror {
         uint256 balBefore = IERC20Mock(daiTokenAddress).balanceOf(finalDispute.receiver);
 
         vm.startPrank(finalDispute.receiver);
-        jurorManager.releaseFundsToWinner(appealId2);
+        disputeManager.releaseFundsToWinner(appealId2);
         vm.stopPrank();
 
         uint256 balAfter = IERC20Mock(daiTokenAddress).balanceOf(finalDispute.receiver);
