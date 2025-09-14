@@ -202,8 +202,8 @@ contract BloomEscrow is ReentrancyGuard, EscrowTokens {
             IERC20 token = IERC20(tokenAddress);
             token.safeTransfer(sender, amount);
         } else {
-            (bool native_success,) = sender.call{value: amount}("");
-            if (!native_success) {
+            (bool nativeSuccess,) = sender.call{value: amount}("");
+            if (!nativeSuccess) {
                 revert BloomEscrow__TransferFailed();
             }
         }

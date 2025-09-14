@@ -2,37 +2,26 @@
 pragma solidity ^0.8.20;
 
 import {Script} from "forge-std/Script.sol";
-import {JurorManager} from "../../src/core/disputes/JurorManager.sol";
+import {DisputeManager} from "../../src/core/disputes/DisputeManager.sol";
 import {HelperConfig} from "../HelperConfig.s.sol";
 import {DeployedAddresses} from "./DeployedAddresses.sol";
 
-contract DeployJurorManager is Script {
-    function run() external returns (JurorManager, HelperConfig) {
+contract DeployDisputeManager is Script {
+    function run() external returns (DisputeManager, HelperConfig) {
         HelperConfig helperConfig = new HelperConfig();
         HelperConfig.NetworkConfig memory networkConfig = helperConfig.getConfigByChainId(block.chainid);
-
-        // Pick addresses automatically if zero
         address storageAddress = DeployedAddresses.getLastDisputeStorage(block.chainid);
-        // address bloomTokenAddress = DeployedAddresses.getLastBloom(block.chainid);
-        address linkAddress = networkConfig.linkAddress;
-        address wrapperAddress = networkConfig.wrapperAddress;
-        
+
         return deploy(
             storageAddress,
-            // bloomTokenAddress,
-            linkAddress,
-            wrapperAddress,
             helperConfig
         );
     }
 
     function deploy(
         address storageAddress,
-        // address bloomTokenAddress,
-        address linkAddress,
-        address wrapperAddress,
         HelperConfig helperConfig
-    ) public returns (JurorManager, HelperConfig) {
+    ) public returns (DisputeManager, HelperConfig) {
         uint256 deployerKey;
         if (block.chainid == 31337) {
             vm.startBroadcast(); // Anvil default
@@ -41,17 +30,14 @@ contract DeployJurorManager is Script {
             vm.startBroadcast(deployerKey);
         }
 
-        JurorManager jurorManager = new JurorManager(
-            storageAddress,
-            // bloomTokenAddress,
-            linkAddress,
-            wrapperAddress
+        DisputeManager disputeManager = new DisputeManager(
+        storageAddress
             // escrowAddress,
             // feeControllerAddress,
             // wrappedNativeTokenAddress
         );
 
         vm.stopBroadcast();
-        return (jurorManager, helperConfig);
+        return (disputeManager, helperConfig);
     }
 }

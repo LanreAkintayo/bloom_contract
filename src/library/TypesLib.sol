@@ -23,7 +23,7 @@ library TypesLib {
     }
 
 
-        //////////////////////////
+     //////////////////////////
     // ENUMS
     //////////////////////////
 
@@ -102,4 +102,6 @@ library TypesLib {
         address tokenAddress;
         uint256 amount;
     }
+
+
 }
