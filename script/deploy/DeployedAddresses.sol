@@ -58,7 +58,7 @@ library DeployedAddresses {
      // ---------------- Juror Manager ----------------
      function getJurorManager(uint256 chainId, uint256 index) internal pure returns (address) {
         if (chainId == 11155111) {
-            if (index == 0) return 0x834f25Ef3D695C888d0792F17024fe7F2fE0c822;
+            if (index == 0) return 0xcBB6C09Bf38AC494F54F19A0C18cc4727A47e29E;
             // Add more deployments here
         }
         revert("FeeController deployment not found for this index");
@@ -66,14 +66,14 @@ library DeployedAddresses {
 
     function getLastJurorManager(uint256 chainId) internal pure returns (address) {
         if (chainId == 11155111) {
-            return 0x834f25Ef3D695C888d0792F17024fe7F2fE0c822; // latest deployment
+            return 0xcBB6C09Bf38AC494F54F19A0C18cc4727A47e29E; // latest deployment
         }
         revert("No FeeController deployment found for this network");
     }
      // ---------------- Dispute Storage ----------------
      function getDisputeStorage(uint256 chainId, uint256 index) internal pure returns (address) {
         if (chainId == 11155111) {
-            if (index == 0) return address(0);
+            if (index == 0) return 0xc550bf851EC14F163AEcEfB2383bAFA78e9968C1;
             // Add more deployments here
         }
         revert("Dispute storage deployment not found for this index");
@@ -81,8 +81,38 @@ library DeployedAddresses {
 
     function getLastDisputeStorage(uint256 chainId) internal pure returns (address) {
         if (chainId == 11155111) {
-            return address(0); // latest deployment
+            return 0xc550bf851EC14F163AEcEfB2383bAFA78e9968C1; // latest deployment
         }
         revert("No Dispute storage deployment found for this network");
+    }
+     // ---------------- Dispute Manager ----------------
+     function getDisputeManager(uint256 chainId, uint256 index) internal pure returns (address) {
+        if (chainId == 11155111) {
+            if (index == 0) return 0xf1587D5265eb6147D4f4E758c01b0e9BD460e8fc;
+            // Add more deployments here
+        }
+        revert("Dispute manager deployment not found for this index");
+    }
+
+    function getLastDisputeManager(uint256 chainId) internal pure returns (address) {
+        if (chainId == 11155111) {
+            return 0xf1587D5265eb6147D4f4E758c01b0e9BD460e8fc; // latest deployment
+        }
+        revert("No Dispute manager deployment found for this network");
+    }
+     // ---------------- Helper Config ----------------
+     function getHelperConfig(uint256 chainId, uint256 index) internal pure returns (address) {
+        if (chainId == 11155111) {
+            if (index == 0) return 0x5aAdFB43eF8dAF45DD80F4676345b7676f1D70e3;
+            // Add more deployments here
+        }
+        revert("Helper config deployment not found for this index");
+    }
+
+    function getLastHelperConfig(uint256 chainId) internal pure returns (address) {
+        if (chainId == 11155111) {
+            return 0x5aAdFB43eF8dAF45DD80F4676345b7676f1D70e3; // latest deployment
+        }
+        revert("No Helper config deployment found for this network");
     }
 }

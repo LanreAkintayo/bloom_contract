@@ -13,13 +13,13 @@ contract DeployJurorManager is Script {
 
         // Pick addresses automatically if zero
         address storageAddress = DeployedAddresses.getLastDisputeStorage(block.chainid);
-        address bloomTokenAddress = DeployedAddresses.getLastBloom(block.chainid);
+        // address bloomTokenAddress = DeployedAddresses.getLastBloom(block.chainid);
         address linkAddress = networkConfig.linkAddress;
         address wrapperAddress = networkConfig.wrapperAddress;
         
         return deploy(
             storageAddress,
-            bloomTokenAddress,
+            // bloomTokenAddress,
             linkAddress,
             wrapperAddress,
             helperConfig
@@ -28,7 +28,7 @@ contract DeployJurorManager is Script {
 
     function deploy(
         address storageAddress,
-        address bloomTokenAddress,
+        // address bloomTokenAddress,
         address linkAddress,
         address wrapperAddress,
         HelperConfig helperConfig
@@ -43,7 +43,7 @@ contract DeployJurorManager is Script {
 
         JurorManager jurorManager = new JurorManager(
             storageAddress,
-            bloomTokenAddress,
+            // bloomTokenAddress,
             linkAddress,
             wrapperAddress
             // escrowAddress,

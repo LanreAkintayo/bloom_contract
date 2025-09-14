@@ -75,7 +75,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner {
     /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
-    constructor(address _storageAddress, address _bloomTokenAddress, address _linkAddress, address _wrapperAddress)
+    constructor(address _storageAddress, address _linkAddress, address _wrapperAddress)
         VRFV2WrapperConsumerBase(_linkAddress, _wrapperAddress)
         ConfirmedOwner(msg.sender)
     {

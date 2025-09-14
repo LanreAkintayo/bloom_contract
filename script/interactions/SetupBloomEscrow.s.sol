@@ -11,9 +11,9 @@ contract SetupBloomEscrow is Script {
     function run() external  {
          HelperConfig helperConfig = new HelperConfig();
         HelperConfig.NetworkConfig memory networkConfig = helperConfig.getConfigByChainId(block.chainid);
-        address bloomEscrowAddress = DeployedAddresses.getLastBloom(block.chainid);
+        address bloomEscrowAddress = DeployedAddresses.getLastBloomEscrow(block.chainid);
         address feeControllerAddress = DeployedAddresses.getLastFeeController(block.chainid);
-        address jurorManagerAddress = address(0);
+        address disputeManagerAddress = DeployedAddresses.getLastDisputeManager(block.chainid);
 
         BloomEscrow bloomEscrow = BloomEscrow(bloomEscrowAddress);
 
@@ -22,7 +22,7 @@ contract SetupBloomEscrow is Script {
         vm.startBroadcast(deployerPrivateKey);
 
         bloomEscrow.addFeeController(feeControllerAddress);
-        bloomEscrow.addDisputeManager(jurorManagerAddress);
+        bloomEscrow.addDisputeManager(disputeManagerAddress);
 
         bloomEscrow.addToken(networkConfig.usdcTokenAddress);
         bloomEscrow.addToken(networkConfig.daiTokenAddress);
