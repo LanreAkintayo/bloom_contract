@@ -67,4 +67,9 @@ abstract contract EscrowTokens is Ownable{
 
         emit TokenRemoved(tokenAddress);
     }
+
+
+    function getAllSupportedTokens() external view returns (address[] memory) {
+        return allSupportedTokens;
+    }
 }

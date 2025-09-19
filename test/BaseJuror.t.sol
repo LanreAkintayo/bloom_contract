@@ -80,7 +80,7 @@ contract BaseJuror is Test {
 
         (jurorManager,) = deployJurorManager.deploy(
             address(disputeStorage),
-            address(bloom),
+            // address(bloom),
             networkConfig.linkAddress,
             networkConfig.wrapperAddress,
             helperConfig

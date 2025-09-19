@@ -7,7 +7,7 @@ import {IBloomEscrow} from "../../interfaces/IBloomEscrow.sol";
 import {IFeeController} from "../../interfaces/IFeeController.sol";
 import {TypesLib} from "../../library/TypesLib.sol";
 
-abstract contract DisputeStorage {
+contract DisputeStorage {
     //////////////////////////
     // ERRORS
     //////////////////////////

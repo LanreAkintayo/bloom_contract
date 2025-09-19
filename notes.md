@@ -26,3 +26,4 @@ The token address that was used in creating deal will be used to appeal
 
 **Don't Forget**
 Don't forget to lock staked amount of the jurors oo
+Evidence should have an ID or something
