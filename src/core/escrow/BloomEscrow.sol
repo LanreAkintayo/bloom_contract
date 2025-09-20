@@ -53,6 +53,9 @@ contract BloomEscrow is ReentrancyGuard, EscrowTokens {
     mapping(address => uint256) public tokenToEscrowFee;
     mapping(address => uint256) public tokenToEscrowFeeClaimed;
 
+
+    
+
     uint256 public dealCount;
     address public disputeManagerAddress;
     address public feeControllerAddress;
