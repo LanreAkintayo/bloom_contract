@@ -23,14 +23,21 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner {
 
     uint256 public constant MAX_PERCENT = 10_000; // This represents 100%
 
+    enum RequestType {
+        INITIAL,
+        TIE_BREAKER
+    }
+
     // For randomness;
     mapping(uint256 => TypesLib.RequestStatus) public s_requests; /* requestId --> requestStatus */
-    mapping(uint256 => address[]) private experiencedPoolTemporary;
-    mapping(uint256 => address[]) private newbiePoolTemporary;
+    mapping(uint256 => address[]) private activeExperiencedByDispute;
+    mapping(uint256 => address[]) private activeNewbiesByDispute;
     mapping(uint256 => uint256) private experienceNeededByDispute;
     mapping(uint256 => uint256) private newbieNeededByDispute;
     mapping(uint256 => uint256) private requestIdToDispute;
+    mapping(uint256 => uint256) private numOfJurors;
     mapping(uint256 => mapping(address => uint256)) private selectionScoresTemp;
+    mapping(uint256 => RequestType) private requestToType;
 
     /*//////////////////////////////////////////////////////////////
                                 ERRORS
@@ -56,6 +63,8 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner {
     error JurorManager__MustVote();
     error JurorManager__NotEnoughStakeToWithdraw();
     error JurorManager__WithdrawalCooldownNotOver();
+    error JurorManager__InsufficientExperienced();
+    error JurorManager__InsufficientNewbies();
 
     /*//////////////////////////////////////////////////////////////
                                 EVENTS
@@ -87,36 +96,43 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner {
                                 LOGIC
     //////////////////////////////////////////////////////////////*/
     function registerJuror(uint256 stakeAmount) external {
+        // Load juror data once
         TypesLib.Juror memory juror = ds.getJuror(msg.sender);
+
+        // ---------------- Validation ----------------
         if (stakeAmount < ds.minStakeAmount() || stakeAmount > ds.maxStakeAmount()) {
             revert JurorManager__InvalidStakeAmount();
         }
-
         if (juror.stakeAmount > 0) {
             revert JurorManager__AlreadyRegistered();
         }
 
-        // Transfer Bloom tokens to this contract
+        // ---------------- Transfer ----------------
         bloomToken.safeTransferFrom(msg.sender, address(this), stakeAmount);
 
-        // // Register juror
-        TypesLib.Juror memory newJuror;
-        newJuror.jurorAddress = msg.sender;
-        newJuror.stakeAmount = stakeAmount;
-        newJuror.reputation = 0;
-        newJuror.missedVotesCount = 0;
+        // ---------------- Create Juror ----------------
+        uint256 score = ds.computeScore(stakeAmount, 0);
 
-        ds.updateJuror(msg.sender, newJuror);
-        // jurors[msg.sender] = juror;
+        TypesLib.Juror memory newJuror = TypesLib.Juror({
+            jurorAddress: msg.sender,
+            stakeAmount: stakeAmount,
+            reputation: 0,
+            missedVotesCount: 0,
+            score: score,
+            lastWithdrawn: 0
+        });
 
-        // Add addres to the list of all the juror addresses
+        // ---------------- Update State ----------------
+        ds.updateJuror(msg.sender, newJuror); // store juror first
+        ds.updateMaxStake(stakeAmount);
+        ds.updateMaxScore(score); // pass score directly
+        ds.updatePools(msg.sender); // pools rely on updated juror info
+
+        // ---------------- Global Lists ----------------
         ds.pushIntoAllJurorAddresses(msg.sender);
-        // allJurorAddresses.push(msg.sender);
-
-        // Add a new fresh juror to the activejurorAddresses
         ds.pushToActiveJurorAddresses(msg.sender);
-        // _pushToActiveJurorAddresses(msg.sender);
 
+        // ---------------- Emit Event ----------------
         emit JurorRegistered(msg.sender, stakeAmount);
     }
 
@@ -147,280 +163,171 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner {
         emit MoreStaked(msg.sender, additionalStake);
     }
 
-    function computeScore(
-        uint256 stakeAmount,
-        uint256 reputation,
-        uint256 _maxStake,
-        uint256 maxReputation,
-        uint256 alphaFP,
-        uint256 betaFP
-    ) public pure returns (uint256) {
-        uint256 score = (alphaFP * stakeAmount / _maxStake) + (betaFP * (reputation + 1) / (maxReputation + 1));
-        return score;
-    }
+    // function computeScore(
+    //     uint256 stakeAmount,
+    //     uint256 reputation,
+    //     uint256 _maxStake,
+    //     uint256 maxReputation,
+    //     uint256 alphaFP,
+    //     uint256 betaFP
+    // ) public pure returns (uint256) {
+    //     uint256 score = (alphaFP * stakeAmount / _maxStake) + (betaFP * (reputation + 1) / (maxReputation + 1));
+    //     return score;
+    // }
 
     /**
      * @notice Selects jurors for a given dispute based on experience and fairness constraints.
      * @param disputeId The ID of the dispute for which jurors are being selected.
-     * @param thresholdFP The minimum threshold in fixedPointScale (1e18) to be counted as an experienced juror.
-     * @param alphaFP The weight factor applied to increase the intensity of stake during selection.
-     * @param betaFP The weight factor applied to increase the intensity of reputation during selection.
-     * @param expNeeded The number of experienced jurors required for this dispute.
-     * @param newbieNeeded The number of newbie jurors required for this dispute.
-     * @param experiencedPoolSize The total number of experienced jurors available in the pool based on offchain calculations
      */
-    function selectJurors(
-        uint256 disputeId,
-        uint256 thresholdFP,
-        uint256 alphaFP,
-        uint256 betaFP,
-        uint256 expNeeded,
-        uint256 newbieNeeded,
-        uint256 experiencedPoolSize
-    ) external onlyOwner returns (uint256) {
-        // Don't select juror for a dispute that already has a juror
+
+    // Note - only the dispute creator will call selectJurors
+    // 5 jurors will be assigned to the dispute.
+    function selectJurors(uint256 disputeId) external returns (uint256) {
         address[] memory disputeJurors = ds.getDisputeJurors(disputeId);
-        address[] memory activeJurorAddresses = ds.getActiveJurorAddresses();
+        if (disputeJurors.length > 0) revert JurorManager__AlreadyAssignedJurors();
 
-        if (disputeJurors.length > 0) {
-            revert JurorManager__AlreadyAssignedJurors();
-        }
+        // Define how many experienced and newbie jurors are needed
+        uint256 expNeeded = 2;
+        uint256 newbieNeeded = 1;
 
-        // To verify the experiencedPoolSize with the one computed off-chain
-        uint256 countAbove = 0;
+        // Get active pools once
+        (address[] memory activeExperienced, address[] memory activeNewbies) = _getActivePools();
 
-        // Create a temporary array to store the selected jurors (experienced and newbies)
-        address[] memory experiencedPoolTemp = new address[](activeJurorAddresses.length);
-        address[] memory newbiePoolTemp = new address[](activeJurorAddresses.length);
+        // Pool size checks
+        if (activeExperienced.length < expNeeded) revert JurorManager__InsufficientExperienced();
+        if (activeNewbies.length < newbieNeeded) revert JurorManager__InsufficientNewbies();
 
-        // Create an index for the arrays (experienced and newbies)
-        uint256 expIndex = 0;
-        uint256 newIndex = 0;
-
-        uint256 maxStake = 0;
-        uint256 maxReputation = 0;
-
-        //// find max stake & reputation
-        for (uint256 i = 0; i < activeJurorAddresses.length; i++) {
-            address currentJurorAddress = activeJurorAddresses[i];
-            TypesLib.Juror memory juror = ds.getJuror(currentJurorAddress); // jurors[currentJurorAddress];
-
-            // Make sure that we can only select a juror that is currently inactive and their stake amount is greater than the minimum stake amount
-            if (juror.stakeAmount >= ds.minStakeAmount()) {
-                if (juror.stakeAmount > maxStake) maxStake = juror.stakeAmount;
-                if (juror.reputation > maxReputation) maxReputation = juror.reputation;
-            }
-        }
-
-        // compute selection scores and assign to pools
-        for (uint256 i = 0; i < activeJurorAddresses.length; i++) {
-            TypesLib.Juror memory juror = ds.getJuror(activeJurorAddresses[i]); // jurors[activeJurorAddresses[i]];
-
-            if (juror.stakeAmount >= ds.minStakeAmount()) {
-                uint256 score =
-                    computeScore(juror.stakeAmount, juror.reputation, maxStake, maxReputation, alphaFP, betaFP);
-
-                if (score >= thresholdFP) {
-                    experiencedPoolTemp[expIndex++] = juror.jurorAddress;
-                    selectionScoresTemp[disputeId][juror.jurorAddress] = score;
-
-                    countAbove++;
-                } else {
-                    newbiePoolTemp[newIndex++] = juror.jurorAddress;
-                    selectionScoresTemp[disputeId][juror.jurorAddress] = score;
-                }
-            }
-        }
-
-        if (countAbove != experiencedPoolSize) {
-            revert JurorManager__ThresholdMismatched();
-        }
-
-        // resize arrays
-        assembly {
-            mstore(experiencedPoolTemp, expIndex)
-        }
-        assembly {
-            mstore(newbiePoolTemp, newIndex)
-        }
-
-        // store temp pools for VRF callback
-        experiencedPoolTemporary[disputeId] = experiencedPoolTemp;
-        newbiePoolTemporary[disputeId] = newbiePoolTemp;
+        // Save requirements + snapshot of active pools
         experienceNeededByDispute[disputeId] = expNeeded;
         newbieNeededByDispute[disputeId] = newbieNeeded;
+        activeExperiencedByDispute[disputeId] = activeExperienced;
+        activeNewbiesByDispute[disputeId] = activeNewbies;
 
-        // request randomness from Chainlink VRF
+        // Request randomness from Chainlink VRF
         uint256 requestId = requestRandomness(ds.callbackGasLimit(), ds.requestConfirmations(), ds.numWords());
-
         s_requests[requestId] = TypesLib.RequestStatus({
             paid: VRF_V2_WRAPPER.calculateRequestPrice(ds.callbackGasLimit()),
             randomWords: new uint256[](0),
             fulfilled: false
         });
 
-        // console.log("Request ID: ", requestId);
         requestIds.push(requestId);
         lastRequestId = requestId;
-        emit RequestSent(requestId, ds.numWords());
         requestIdToDispute[requestId] = disputeId;
+        requestToType[requestId] = RequestType.INITIAL;
+
+        emit RequestSent(requestId, ds.numWords());
 
         return requestId;
     }
 
     // ------------------- VRF CALLBACK -------------------
     function fulfillRandomWords(uint256 _requestId, uint256[] memory _randomWords) internal override {
-        // console.log("Request ID in the contract:", _requestId);
-        // console.log("Random words:", _randomWords[0]);
-
-        if (s_requests[_requestId].paid <= 0) {
-            revert JurorManager__RequestNotFound();
-        }
+        if (s_requests[_requestId].paid <= 0) revert JurorManager__RequestNotFound();
         s_requests[_requestId].fulfilled = true;
 
-        uint256 randomness = _randomWords[0];
         uint256 disputeId = requestIdToDispute[_requestId];
+        RequestType requestType = requestToType[_requestId];
 
-        address[] memory experiencedPool = experiencedPoolTemporary[disputeId];
-        address[] memory newbiePool = newbiePoolTemporary[disputeId];
+        if (requestType == RequestType.INITIAL) {
+            uint256 expNeeded = experienceNeededByDispute[disputeId];
+            uint256 newbieNeeded = newbieNeededByDispute[disputeId];
+            uint256 total = expNeeded + newbieNeeded;
 
-        // I want to print out the content of experienced pool and newbie pool for testing sake
-        // console.log("Experienced Pool Length: ", experiencedPool.length);
-        // for (uint256 i = 0; i < experiencedPool.length; i++) {
-        //     // console.log("experienced pool address: ", experiencedPool[i], "with selection score : ", selectionScoresTemp[disputeId][experiencedPool[i]]);
-        // }
+            address[] memory activeExperienced = activeExperiencedByDispute[disputeId];
+            address[] memory activeNewbies = activeNewbiesByDispute[disputeId];
 
-        // // console.log("Newbie Pool Length: ", newbiePool.length);
-        // for (uint256 i = 0; i < newbiePool.length; i++) {
-        //     // console.log("newbie pool address: ", newbiePool[i], "with selection score : ", selectionScoresTemp[disputeId][newbiePool[i]]);
-        // }
+            // Select experienced and newbie jurors
+            address[] memory selectedExperienced =
+                _selectJurors(expNeeded, _randomWords[0], activeExperienced, disputeId);
 
-        uint256 expNeeded = experienceNeededByDispute[disputeId];
-        uint256 newbieNeeded = newbieNeededByDispute[disputeId];
-        uint256 total = expNeeded + newbieNeeded;
+            address[] memory selectedNewbies = _selectJurors(newbieNeeded, _randomWords[1], activeNewbies, disputeId);
 
-        address[] memory selected = new address[](total);
+            // Combine selected jurors
+            address[] memory selected = new address[](total);
+            uint256 idx = 0;
+            for (uint256 i = 0; i < selectedExperienced.length; i++) {
+                selected[idx++] = selectedExperienced[i];
+            }
+            for (uint256 i = 0; i < selectedNewbies.length; i++) {
+                selected[idx++] = selectedNewbies[i];
+            }
+
+            ds.updateDisputeJurors(disputeId, selected);
+            ds.updateDisputeTimer(disputeId, TypesLib.Timer(disputeId, block.timestamp, ds.votingPeriod(), 0));
+
+            emit JurorsSelected(disputeId, selected);
+        } else if (requestType == RequestType.TIE_BREAKER) {}
+    }
+
+    function _getActivePools() internal view returns (address[] memory experienced, address[] memory newbies) {
+        experienced = _getActiveJurors(ds.getExperiencedPool());
+        newbies = _getActiveJurors(ds.getNewbiePool());
+    }
+
+    function _getActiveJurors(address[] memory pool) internal view returns (address[] memory) {
+        address[] memory eligible = new address[](pool.length);
+        uint256 index;
+        uint256 minStakeAmount = ds.minStakeAmount();
+        uint256 ongoingDisputeThreshold = ds.ongoingDisputeThreshold();
+        uint256 missedVoteThreshold = ds.missedVoteThreshold();
+
+        for (uint256 i = 0; i < pool.length; i++) {
+            address jurorAddress = pool[i];
+            TypesLib.Juror memory juror = ds.getJuror(jurorAddress);
+            uint256 ongoingDisputeCount = ds.ongoingDisputeCount(jurorAddress);
+
+            if (
+                juror.missedVotesCount >= missedVoteThreshold || juror.stakeAmount < minStakeAmount
+                    || ongoingDisputeCount >= ongoingDisputeThreshold
+            ) {
+                continue;
+            }
+            eligible[index++] = jurorAddress;
+        }
+
+        // shrink array
+        assembly {
+            mstore(eligible, index)
+        }
+        return eligible;
+    }
+
+    function _selectJurors(uint256 needed, uint256 rand, address[] memory pool, uint256 disputeId)
+        internal
+        returns (address[] memory selected)
+    {
+        selected = new address[](needed);
         uint256 idx = 0;
-        uint256 rand = randomness;
 
-        // pick experienced jurors
-        for (uint256 i = 0; i < expNeeded; i++) {
-            uint256 pickIdx = rand % experiencedPool.length;
-            address selectedJurorAddress = experiencedPool[pickIdx];
-            TypesLib.Juror memory correspondingJuror = ds.getJuror(selectedJurorAddress); // jurors[selectedJurorAddress];
-            selected[idx++] = selectedJurorAddress;
+        for (uint256 i = 0; i < needed; i++) {
+            uint256 pickIdx = rand % pool.length;
+            address jurorAddr = pool[pickIdx];
 
-            // Update the candidate mapping;
-            TypesLib.Candidate memory correspondingCandidate = TypesLib.Candidate(
+            TypesLib.Juror memory juror = ds.getJuror(jurorAddr);
+            selected[idx++] = jurorAddr;
+
+            // Update candidate mapping
+            TypesLib.Candidate memory candidate = TypesLib.Candidate(
                 disputeId,
-                selectedJurorAddress,
-                correspondingJuror.stakeAmount,
-                correspondingJuror.reputation,
-                selectionScoresTemp[disputeId][selectedJurorAddress],
+                jurorAddr,
+                juror.stakeAmount,
+                juror.reputation,
+                selectionScoresTemp[disputeId][jurorAddr],
                 false
             );
+            ds.updateDisputeCandidate(disputeId, jurorAddr, candidate);
+            ds.pushIntoJurorDisputeHistory(jurorAddr, disputeId);
 
-            ds.updateDisputeCandidate(disputeId, selectedJurorAddress, correspondingCandidate);
-            // isDisputeCandidate[disputeId][selectedJurorAddress] =
-
-            // Track all the disputes per juror
-            ds.pushIntoJurorDisputeHistory(selectedJurorAddress, disputeId);
-            // jurorDisputeHistory[selectedJurorAddress].push(disputeId);
-
-            // swap-remove
-            experiencedPool[pickIdx] = experiencedPool[experiencedPool.length - 1];
+            // Swap-remove
+            pool[pickIdx] = pool[pool.length - 1];
             assembly {
-                mstore(experiencedPool, sub(mload(experiencedPool), 1))
+                mstore(pool, sub(mload(pool), 1))
             }
 
-            rand = uint256(keccak256(abi.encodePacked(rand, i)));
-            // console.log("Random: ", rand);
-        }
-
-        // pick newbie jurors
-        for (uint256 i = 0; i < newbieNeeded; i++) {
-            uint256 pickIdx = rand % newbiePool.length;
-            address selectedJurorAddress = newbiePool[pickIdx];
-            TypesLib.Juror memory correspondingJuror = ds.getJuror(selectedJurorAddress); // jurors[selectedJurorAddress];
-            selected[idx++] = selectedJurorAddress;
-
-            // Update the candidate mapping;
-            TypesLib.Candidate memory correspondingCandidate = TypesLib.Candidate(
-                disputeId,
-                selectedJurorAddress,
-                correspondingJuror.stakeAmount,
-                correspondingJuror.reputation,
-                selectionScoresTemp[disputeId][selectedJurorAddress],
-                false
-            );
-
-            ds.updateDisputeCandidate(disputeId, selectedJurorAddress, correspondingCandidate);
-            // isDisputeCandidate[disputeId][selectedJurorAddress] =
-
-            // Track all the disputes per juror
-            ds.pushIntoJurorDisputeHistory(selectedJurorAddress, disputeId);
-
-            // isDisputeCandidate[disputeId][selectedJurorAddress] = Candidate(
-            //     disputeId,
-            //     selectedJurorAddress,
-            //     correspondingJuror.stakeAmount,
-            //     correspondingJuror.reputation,
-            //     selectionScoresTemp[disputeId][selectedJurorAddress],
-            //     false
-            // );
-
-            // Track all the disputes per juror
-            // jurorDisputeHistory[selectedJurorAddress].push(disputeId);
-
-            // swap-remove
-            newbiePool[pickIdx] = newbiePool[newbiePool.length - 1];
-            assembly {
-                mstore(newbiePool, sub(mload(newbiePool), 1))
-            }
-
+            // Update randomness
             rand = uint256(keccak256(abi.encodePacked(rand, i)));
         }
-
-        // mark jurors active
-        for (uint256 i = 0; i < selected.length; i++) {
-            address selectedAddress = selected[i];
-            uint256 ongoingDisputeCount = ds.ongoingDisputeCount(selectedAddress);
-
-            console.log("Ongoing dispute count before incrementing ", selectedAddress, " is ", ongoingDisputeCount);
-
-            ds.updateOngoingDisputeCount(selectedAddress, ongoingDisputeCount + 1);
-
-            console.log(
-                "Ongoing dispute count after getting selectied ",
-                selectedAddress,
-                " is ",
-                ds.ongoingDisputeCount(selectedAddress)
-            );
-            // ongoingDisputeCounFt[selectedAddress] += 1;
-
-            bool isPresent = ds.isInActiveJurorAddresses(selectedAddress);
-            if (ongoingDisputeCount > ds.ongoingDisputeThreshold() && isPresent) {
-                ds.popFromActiveJurorAddresses(selectedAddress);
-            }
-        }
-
-        // As per they are active here, let me remove from them from the available jurors.
-
-        // I want to print the list of all the selected jurors;
-        // for (uint256 i = 0; i < selected.length; i++) {
-        //     // console.log("Selected jurors: ", selected[i], "with selection score : ", selectionScoresTemp[disputeId][selected[i]]);
-        // }
-
-        // console.log("In fulfill randomw words, block.timestamp is ", block.timestamp);
-        // console.log("In fulfill randomw words, startTime is ", _startTime);
-
-        ds.updateDisputeJurors(disputeId, selected);
-        // disputeJurors[disputeId] = selected;
-
-        ds.updateDisputeTimer(disputeId, TypesLib.Timer(disputeId, block.timestamp, ds.votingPeriod(), 0));
-        // disputeTimer[disputeId] = Timer(disputeId, block.timestamp, votingPeriod, 0);
-
-        emit JurorsSelected(disputeId, selected);
     }
 
     function vote(uint256 disputeId, address support) external {
@@ -673,7 +580,6 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner {
 
         return eligibleAddresses;
     }
-
 
     function withdrawStake(uint256 _stakeAmount) external {
         TypesLib.Juror memory juror = ds.getJuror(msg.sender); // jurors[msg.sender];

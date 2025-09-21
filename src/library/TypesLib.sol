@@ -63,6 +63,7 @@ library TypesLib {
         address jurorAddress;
         uint256 stakeAmount;
         uint256 reputation;
+        uint256 score;  
         uint256 missedVotesCount;
         uint256 lastWithdrawn;
     }

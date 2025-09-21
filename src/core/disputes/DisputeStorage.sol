@@ -43,16 +43,26 @@ contract DisputeStorage {
     mapping(uint256 disputeId => TypesLib.Dispute) public disputes;
     mapping(uint256 dealId => mapping(address => TypesLib.Evidence[])) public dealEvidences;
 
+    uint256 public maxStake;
+    uint256 public maxReputation;
+    uint256 public maxScore;
+
     //////////////////////////
     // JURORS
     //////////////////////////
 
     uint256 public lockedPercentage = 7000; // 70%
-    uint256 public cooldownDuration = block.chainid == 31337 ? 7 days: 15 minutes;
+    uint256 public cooldownDuration = block.chainid == 31337 ? 7 days : 15 minutes;
 
     mapping(address jurorAddress => TypesLib.Juror) public jurors;
     address[] public allJurorAddresses;
     address[] public activeJurorAddresses;
+
+    address[] public newbiePool;
+    mapping(address jurorAddress => uint256) public newbiePoolIndex;
+
+    address[] public experiencedPool;
+    mapping(address jurorAddress => uint256) public experiencedPoolIndex;
 
     mapping(address jurorAddress => bool) public isJurorActive;
     mapping(address jurorAddress => uint256[] disputeIds) public jurorDisputeHistory;
@@ -70,14 +80,16 @@ contract DisputeStorage {
     //////////////////////////
     // CANDIDATES & VOTING
     //////////////////////////
-
+    uint256 public alphaFP = 0.4e18;
+    uint256 public betaFP = 0.6e18;
+    uint256 public thresholdPercent = 6000; // 60% (top 40% will be in the experienced pool)
     uint256 public appealThreshold = 3;
     uint256 public missedVoteThreshold = 3;
     uint256 public ongoingDisputeThreshold = 3;
     uint256 public lambda = 0.2e18; // Smoothing factor scaled by 1e18
     uint256 public k = 5;
     uint256 public noVoteK = 8;
-    uint256 public votingPeriod = block.chainid == 31337 ? 48 hours: 15 minutes;
+    uint256 public votingPeriod = block.chainid == 31337 ? 48 hours : 15 minutes;
 
     mapping(uint256 disputeId => address[] jurorAddresses) public disputeJurors;
     mapping(uint256 disputeId => mapping(address jurorAddress => TypesLib.Candidate)) public isDisputeCandidate;
@@ -93,7 +105,7 @@ contract DisputeStorage {
     mapping(uint256 disputeId => uint256) public appealCounts;
     mapping(uint256 appealId => uint256 disputeId) public appealToDispute;
 
-    uint256 public appealDuration = block.chainid == 31337 ? 24 hours: 10 minutes;
+    uint256 public appealDuration = block.chainid == 31337 ? 24 hours : 10 minutes;
 
     //////////////////////////
     // STAKING RULES
@@ -116,25 +128,27 @@ contract DisputeStorage {
     address public linkAddress;
     address public wrapperAddress;
 
-
     //////////////////////////
     // CONSTRUCTOR
     //////////////////////////
-    constructor(
-        address _bloomEscrow,
-        address _feeController,
-        address _bloomTokenAddress,
-        address _wrappedNative
-    ) {
+    constructor(address _bloomEscrow, address _feeController, address _bloomTokenAddress, address _wrappedNative) {
         bloomEscrow = IBloomEscrow(_bloomEscrow);
         feeController = IFeeController(_feeController);
         bloomToken = IERC20(_bloomTokenAddress);
         wrappedNative = _wrappedNative;
     }
-   
+
     //////////////////////////
     // VIEW FUNCTIONS
     //////////////////////////
+
+    function getExperiencedPool() external view returns (address[] memory) {
+        return experiencedPool;
+    }
+
+    function getNewbiePool() external view returns (address[] memory) {
+        return newbiePool;
+    }
 
     function getDispute(uint256 _disputeId) external view returns (TypesLib.Dispute memory) {
         return disputes[_disputeId];
@@ -184,7 +198,11 @@ contract DisputeStorage {
         return residuePayments[_disputeId][_tokenAddress];
     }
 
-    function getDealEvidence(uint256 _dealId, address _ownerAddress) external view returns (TypesLib.Evidence[] memory) {
+    function getDealEvidence(uint256 _dealId, address _ownerAddress)
+        external
+        view
+        returns (TypesLib.Evidence[] memory)
+    {
         return dealEvidences[_dealId][_ownerAddress];
     }
 
@@ -258,11 +276,9 @@ contract DisputeStorage {
         appealToDispute[_appealId] = _disputeId;
     }
 
-    function updateDisputeCandidate(
-        uint256 _disputeId,
-        address _jurorAddress,
-        TypesLib.Candidate memory _candidate
-    ) external {
+    function updateDisputeCandidate(uint256 _disputeId, address _jurorAddress, TypesLib.Candidate memory _candidate)
+        external
+    {
         isDisputeCandidate[_disputeId][_jurorAddress] = _candidate;
     }
 
@@ -326,11 +342,104 @@ contract DisputeStorage {
         totalResidue[_tokenAddress] = _amount;
     }
 
-    function pushIntoDealEvidences(
-        uint256 _dealId,
-        address _ownerAddress,
-        TypesLib.Evidence memory _evidence
-    ) external {
+    function updateMaxStake(uint256 _amount) external {
+        if (_amount > maxStake) {
+            maxStake = _amount;
+        }
+    }
+
+    function updateMaxReputation(uint256 _reputation) external {
+        if (_reputation > maxReputation) {
+            maxReputation = _reputation;
+        }
+    }
+
+    function computeScore(uint256 _stakeAmount, uint256 _reputation) public view returns (uint256) {
+        uint256 score = (alphaFP * _stakeAmount / maxStake) + (betaFP * (_reputation + 1) / (maxReputation + 1));
+        return score;
+    }
+
+    function updateMaxScore(uint256 score) external {
+        if (score > maxScore) {
+            maxScore = score;
+        }
+    }
+
+    function updateMaxValues(uint256 stakeAmount, uint256 score) external {
+    if (stakeAmount > maxStake) {
+        maxStake = stakeAmount;
+    }
+    if (score > maxScore) {
+        maxScore = score;
+    }
+}
+
+
+    function updatePools(address _jurorAddress) external {
+        // Here we balance the newbie and experienced pools;
+        uint256 thresholdScore = thresholdPercent * maxScore / MAX_PERCENT;
+
+        TypesLib.Juror memory juror = jurors[_jurorAddress];
+        if (juror.score >= thresholdScore) {
+            // Push into experienced pool
+            _updateExperiencedPool(_jurorAddress);
+        } else {
+            // Push into newbie pool
+            _updateNewbiePool(_jurorAddress);
+        }
+    }
+
+    function _updateExperiencedPool(address _jurorAddress) internal {
+        // ---------------- Remove from newbie pool ----------------
+        uint256 newbieIndexPlusOne = newbiePoolIndex[_jurorAddress];
+        if (newbieIndexPlusOne != 0) {
+            uint256 index = newbieIndexPlusOne - 1;
+            uint256 lastIndex = newbiePool.length - 1;
+            address lastJuror = newbiePool[lastIndex];
+
+            // Swap-remove
+            newbiePool[index] = lastJuror;
+            newbiePoolIndex[lastJuror] = index + 1;
+
+            newbiePool.pop();
+            delete newbiePoolIndex[_jurorAddress];
+        }
+
+        // ---------------- Add to experienced pool ----------------
+        uint256 experiencedIndexPlusOne = experiencedPoolIndex[_jurorAddress];
+        if (experiencedIndexPlusOne == 0) {
+            experiencedPool.push(_jurorAddress);
+            experiencedPoolIndex[_jurorAddress] = experiencedPool.length; // store index + 1
+        }
+    }
+
+    function _updateNewbiePool(address _jurorAddress) internal {
+// ---------------- Remove from experienced pool ----------------
+    uint256 expIndexPlusOne = experiencedPoolIndex[_jurorAddress];
+    if (expIndexPlusOne != 0) {
+        uint256 index = expIndexPlusOne - 1;
+        uint256 lastIndex = experiencedPool.length - 1;
+        address lastJuror = experiencedPool[lastIndex];
+
+        // Swap-remove
+        experiencedPool[index] = lastJuror;
+        experiencedPoolIndex[lastJuror] = index + 1;
+
+        experiencedPool.pop();
+        delete experiencedPoolIndex[_jurorAddress];
+    }
+
+    // ---------------- Add to newbie pool ----------------
+    uint256 newbieIndexPlusOne = newbiePoolIndex[_jurorAddress];
+    if (newbieIndexPlusOne == 0) {
+        newbiePool.push(_jurorAddress);
+        newbiePoolIndex[_jurorAddress] = newbiePool.length; // store index + 1
+    }
+    }
+
+    function pushIntoDealEvidences(uint256 _dealId, address _ownerAddress, TypesLib.Evidence memory _evidence)
+        external
+    {
         dealEvidences[_dealId][_ownerAddress].push(_evidence);
     }
 

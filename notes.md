@@ -31,4 +31,11 @@ Evidence should have an ID or something
 1. Add vrf timeout
 2. select juror should be for everybody
 3. add more getters
-4. 
+
+
+
+while computing score, these are things to look out for;
+we want to keep track of the max stake and max reputation. When you register, stakeMore, withdraw stake, distribute rewards and reputation, your max stake and max reputaiton changes
+when stake and reputation changes, your scores will also be recomputed.
+when score gets recomputed, the experienced pool and the newbie pool will also get recomputed.
+
