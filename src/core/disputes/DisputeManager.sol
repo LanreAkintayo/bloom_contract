@@ -135,6 +135,8 @@ contract DisputeManager is ConfirmedOwner {
 
         ds.setDisputes(newDisputeId, dispute);
 
+        ds.updateAllDisputes(newDisputeId);
+
         // disputes[disputeId] = dispute;
 
         if (ds.dealToDispute(dealId) == 0) {

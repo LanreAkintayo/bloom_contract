@@ -39,6 +39,9 @@ contract DisputeStorage {
     uint256 public disputeId;
     uint256 public constant MAX_PERCENT = 10_000; // 100%
 
+    uint256[] public allDisputes;
+    mapping(uint256 => bool) public ongoingDisputes;
+
     mapping(uint256 dealId => uint256 disputeId) public dealToDispute;
     mapping(uint256 disputeId => TypesLib.Dispute) public disputes;
     mapping(uint256 dealId => mapping(address => TypesLib.Evidence[])) public dealEvidences;
@@ -255,6 +258,14 @@ contract DisputeStorage {
         disputes[_disputeId].winner = _winner;
     }
 
+    function updateAllDisputes(uint256 _disputeId) external {
+        allDisputes.push(_disputeId);   
+    }
+
+    function updateDisputeStatus(uint256 _disputeId, bool _status) external {
+        ongoingDispute[_disputeId] = _status;
+    }
+
     function updateDisputeJurors(uint256 _disputeId, address[] memory _jurors) external {
         disputeJurors[_disputeId] = _jurors;
     }
@@ -308,6 +319,17 @@ contract DisputeStorage {
 
     function updateJurorStakeAmount(address _jurorAddress, uint256 _stakeAmount) external {
         jurors[_jurorAddress].stakeAmount = _stakeAmount;
+
+        if (_stakeAmount > maxStake) {
+            maxStake = _stakeAmount;
+        }
+        // If the stake changes, then user scores should also change;
+        uint256 newScore = computeScore(_stakeAmount, jurors[_jurorAddress].reputation);
+        jurors[_jurorAddress].score = newScore;
+
+        if (newScore > maxScore) {
+            maxScore = newScore;
+        }
     }
 
     function updateJurorReputation(address _jurorAddress, uint256 _reputation) external {
@@ -374,6 +396,9 @@ contract DisputeStorage {
     }
 }
 
+function updateMaxValues(address _jurorAddress) external {
+    
+}
 
     function updatePools(address _jurorAddress) external {
         // Here we balance the newbie and experienced pools;
@@ -387,6 +412,9 @@ contract DisputeStorage {
             // Push into newbie pool
             _updateNewbiePool(_jurorAddress);
         }
+
+        // Let's update the stake, the reputation and the score of the user too.
+
     }
 
     function _updateExperiencedPool(address _jurorAddress) internal {

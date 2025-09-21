@@ -72,7 +72,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner {
     event JurorRegistered(address indexed juror, uint256 stakeAmount);
     event MinStakeAmountUpdated(uint256 indexed newMinStakeAmount);
     event MaxStakeAmountUpdated(uint256 indexed newMaxStakeAmount);
-    event MoreStaked(address indexed juror, uint256 indexed additionalStaked);
+    event MoreStaked(address indexed juror, uint256 indexed additionalStaked, uint256 indexed newStakeAmount);
     event JurorsSelected(uint256 indexed disputeId, address[] indexed selected);
     event RequestSent(uint256 requestId, uint32 numWords);
     event RequestFulfilled(uint256 requestId, uint256[] randomWords, uint256 payment);
@@ -137,43 +137,30 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner {
     }
 
     function stakeMore(uint256 additionalStake) external {
-        if (additionalStake == 0) {
-            revert JurorManager__ZeroAmount();
+        if (additionalStake == 0) revert JurorManager__ZeroAmount();
+
+        // pull juror struct from ds (external call, returns memory copy)
+        TypesLib.Juror memory juror = ds.getJuror(msg.sender);
+        if (juror.jurorAddress == address(0)) revert JurorManager__NotRegistered();
+
+        uint256 newStakeAmount;
+        unchecked {
+            newStakeAmount = juror.stakeAmount + additionalStake;
         }
-
-        TypesLib.Juror memory juror = ds.getJuror(msg.sender); // jurors[msg.sender];
-
-        if (juror.jurorAddress == address(0)) {
-            revert JurorManager__NotRegistered();
-        }
-
-        uint256 newStakeAmount = juror.stakeAmount + additionalStake;
 
         if (newStakeAmount > ds.maxStakeAmount()) {
             revert JurorManager__InvalidStakeAmount();
         }
 
-        // Transfer Bloom tokens to this contract
+        // update ds first (state changes before external ERC20 call)
+        ds.updateJurorStakeAmount(msg.sender, newStakeAmount);
+        ds.updatePools(msg.sender);
+
+        // then transfer tokens
         bloomToken.safeTransferFrom(msg.sender, address(this), additionalStake);
 
-        // Update juror stake
-        ds.updateJurorStakeAmount(msg.sender, newStakeAmount);
-        // juror.stakeAmount = newStakeAmount;
-
-        emit MoreStaked(msg.sender, additionalStake);
+        emit MoreStaked(msg.sender, additionalStake, newStakeAmount);
     }
-
-    // function computeScore(
-    //     uint256 stakeAmount,
-    //     uint256 reputation,
-    //     uint256 _maxStake,
-    //     uint256 maxReputation,
-    //     uint256 alphaFP,
-    //     uint256 betaFP
-    // ) public pure returns (uint256) {
-    //     uint256 score = (alphaFP * stakeAmount / _maxStake) + (betaFP * (reputation + 1) / (maxReputation + 1));
-    //     return score;
-    // }
 
     /**
      * @notice Selects jurors for a given dispute based on experience and fairness constraints.
@@ -256,6 +243,8 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner {
             ds.updateDisputeJurors(disputeId, selected);
             ds.updateDisputeTimer(disputeId, TypesLib.Timer(disputeId, block.timestamp, ds.votingPeriod(), 0));
 
+            ds.updateDisputeStatus(disputeId, true);
+
             emit JurorsSelected(disputeId, selected);
         } else if (requestType == RequestType.TIE_BREAKER) {}
     }
@@ -330,58 +319,116 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner {
         }
     }
 
-    function vote(uint256 disputeId, address support) external {
-        // Make sure that the caller is one of the selected juror for the dispute
-        bool isEligible = checkVoteEligibility(disputeId, msg.sender);
-        TypesLib.Dispute memory dispute = ds.getDispute(disputeId);
-        uint256 correspondingDealId = dispute.dealId;
-        TypesLib.Timer memory timer = ds.getDisputeTimer(disputeId); // disputeTimer[disputeId];
-        TypesLib.Vote memory jurorVote = ds.getDisputeVote(disputeId, msg.sender); // disputeVotes[disputeId][msg.sender];
-        TypesLib.Vote[] memory allDisputeVotes = ds.getAllDisputeVotes(disputeId);
-        address[] memory disputeJurors = ds.getDisputeJurors(disputeId);
-        if (support == address(0)) {
-            revert JurorManager__MustVote();
+    function checkUpKeep(bytes calldata /*checkData*/ )
+        external
+        view
+        returns (bool upkeepNeeded, bytes memory performData)
+    {
+        uint256[] memory allDisputes = ds.getAllDisputes();
+        uint256[] memory disputesToExtend = new uint256[allDisputes.length];
+
+        uint256 count = 0;
+
+        for (uint256 i = 0; i < allDisputes.length; i++) {
+            uint256 disputeId = allDisputes[i];
+
+            // Skip disputes that are no longer in voting;
+            if (!ds.ongoingDispute(disputeId)) continue;
+
+            // Get timer info;
+            TypesLib.Timer memory timer = ds.getDisputeTimer(disputeId);
+            if (timer.extendDuration > 0) continue;
+
+            if (block.timestamp <= timer.startTime + timer.standardVotingDuration) continue;
+
+            // Let's check if quorum is met
+            uint256 confirmedVotes = _getConfirmedVotes(disputeId);
+            uint256 quorum = ds.getDisputeJurors(disputeId).length - 2;
+            if (confirmedVotes < quorum) {
+                disputesToExtend[count++] = disputeId;
+            }
         }
+
+        if (count > 0) {
+            upkeepNeeded = true;
+
+            // Let's trim array to actual size.
+            assembly {
+                mstore(disputesToExtend, count)
+            }
+
+            performData = abi.encode(disputesToExtend);
+        } else {
+            upkeepNeeded = false;
+            performData = "";
+        }
+    }
+
+    function performUpkeep(bytes calldata performData) external {
+        uint256[] memory disputesToExtend = abi.decode(performData, uint256[]);
+        for (uint256 i = 0; i < disputesToExtend.length; i++) {
+            _extendVotingPeriod(disputesToExtend[i]);
+        }
+    }
+
+    function vote(uint256 disputeId, address support) external {
+        // Validate input
+        if (support == address(0)) revert JurorManager__MustVote();
+
+        // Check voting period
+        TypesLib.Timer memory timer = ds.getDisputeTimer(disputeId);
         if (block.timestamp > timer.startTime + timer.standardVotingDuration + timer.extendDuration) {
             revert JurorManager__VotingPeriodExpired();
         }
 
-        if (!isEligible) {
-            revert JurorManager__NotEligible();
-        }
+        // Check eligibility
+        address[] memory jurors = ds.getDisputeJurors(disputeId);
+        if (!checkVoteEligibility(jurors, msg.sender)) revert JurorManager__NotEligible();
 
-        // Make sure voter has not voted before;
-        if (jurorVote.jurorAddress != address(0)) {
-            revert JurorManager__AlreadyVoted();
-        }
+        // Ensure the voter has not voted yet
+        TypesLib.Vote memory jurorVote = ds.getDisputeVote(disputeId, msg.sender);
+        if (jurorVote.jurorAddress != address(0)) revert JurorManager__AlreadyVoted();
 
-        // Make sure that the number of votes is equal to the number of candidates selected to vote;
-        if (allDisputeVotes.length + 1 > disputeJurors.length) {
-            revert JurorManager__MaxVoteExceeded();
-        }
-        // Then you vote
-        TypesLib.Vote memory newVote = TypesLib.Vote(msg.sender, disputeId, correspondingDealId, support);
+        // Ensure max votes not exceeded
+        TypesLib.Vote[] memory allVotes = ds.getAllDisputeVotes(disputeId);
+        if (allVotes.length + 1 > jurors.length) revert JurorManager__MaxVoteExceeded();
+
+        // Record the vote
+        TypesLib.Dispute memory dispute = ds.getDispute(disputeId);
+        TypesLib.Vote memory newVote =
+            TypesLib.Vote({jurorAddress: msg.sender, disputeId: disputeId, dealId: dispute.dealId, support: support});
 
         ds.updateDisputeVote(disputeId, msg.sender, newVote);
-        // disputeVotes[disputeId][msg.sender] = newVote;
-
         ds.pushIntoAllDisputeVotes(disputeId, newVote);
-        // allDisputeVotes[disputeId].push(newVote);
 
         // Emit event
         emit Voted(disputeId, msg.sender, support);
     }
 
-    function checkVoteEligibility(uint256 disputeId, address voter) public view returns (bool isEligible) {
+    function checkVoteEligibility(address[] memory disputeVoters, address voter)
+        public
+        pure
+        returns (bool isEligible)
+    {
         // You are eligible if you are one of the assigned jurors
-        address[] memory disputeVoters = ds.getDisputeJurors(disputeId); // disputeJurors[disputeId];
-
         for (uint256 i = 0; i < disputeVoters.length; i++) {
             if (disputeVoters[i] == voter) {
                 isEligible = true;
                 break;
             }
         }
+    }
+
+    function extendVotingPeriod(uint256 _disputeId) external {
+        // Here, the voting period is extended if the number of voters is less than the quorum;
+        TypesLib memory disputeJurors = ds.getDisputeJurors(_disputeId);
+        uint256 confirmedVotes = _getConfirmedVotes(_disputeId);
+        uint256 quorum = disputeJurors.length - 2; // 3/5, 5/7 or 7/9
+        if (confirmedVotes < quorum) {
+            // Then we extend time
+        }
+
+        emit ExtendedVotingPeriod(_disputeId);
     }
 
     function addJuror(uint256 _disputeId, uint256 numJurors, uint256 duration) external onlyOwner {
