@@ -421,12 +421,13 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner {
 
     function extendVotingPeriod(uint256 _disputeId) external {
         // Here, the voting period is extended if the number of voters is less than the quorum;
-        TypesLib memory disputeJurors = ds.getDisputeJurors(_disputeId);
-        uint256 confirmedVotes = _getConfirmedVotes(_disputeId);
-        uint256 quorum = disputeJurors.length - 2; // 3/5, 5/7 or 7/9
-        if (confirmedVotes < quorum) {
-            // Then we extend time
-        }
+        TypesLib.Timer memory timer = ds.getDisputeTimer(_disputeId); // disputeTimer[_disputeId];
+
+        // If alrady extended, do nothing;
+        if (timer.extendDuration > 0) return;
+
+        // If not, extend the voting period;
+        ds.updateDisputeTimer(_disputeId, TypesLib.Timer(_disputeId, timer.startTime, timer.standardVotingDuration, ds.extendingDuration()));
 
         emit ExtendedVotingPeriod(_disputeId);
     }
