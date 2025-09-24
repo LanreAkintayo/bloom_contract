@@ -58,7 +58,10 @@ contract BloomEscrowTest is Test {
     // Helper functions
     // ------------------------
 
-    function _createERC20Deal(address _sender, address _receiver, address tokenAddress, uint256 amount)
+
+    // In your smart contract
+
+    function _createERC20Deal(address _sender, address _receiver, address tokenAddress, uint256 amount, string memory description)
         internal
         returns (uint256 dealId)
     {
@@ -71,13 +74,13 @@ contract BloomEscrowTest is Test {
 
         vm.startPrank(_sender);
         token.approve(address(bloomEscrow), totalAmount);
-        bloomEscrow.createDeal(_sender, _receiver, tokenAddress, amount);
+        bloomEscrow.createDeal(_sender, _receiver, tokenAddress, amount, description);
         vm.stopPrank();
 
         return bloomEscrow.dealCount() - 1;
     }
 
-    function _createETHDeal(address _sender, address _receiver, uint256 amount) internal returns (uint256 dealId) {
+    function _createETHDeal(address _sender, address _receiver, uint256 amount, string memory description) internal returns (uint256 dealId) {
         uint256 escrowFee = feeController.calculateEscrowFee(amount);
         uint256 totalAmount = amount + escrowFee;
 
@@ -86,7 +89,7 @@ contract BloomEscrowTest is Test {
         vm.startPrank(_sender);
         console.log("Network.wethTokenAddress: ", networkConfig.wethTokenAddress);
         console.log("Network.wrappedTokenAddress: ", networkConfig.wrappedNativeTokenAddress);
-        bloomEscrow.createDeal{value: totalAmount}(_sender, _receiver, networkConfig.wethTokenAddress, amount);
+        bloomEscrow.createDeal{value: totalAmount}(_sender, _receiver, networkConfig.wethTokenAddress, amount, description);
         vm.stopPrank();
 
         return bloomEscrow.dealCount() - 1;
@@ -113,7 +116,8 @@ contract BloomEscrowTest is Test {
 
     function testCreateDealWithERC20() external {
         uint256 amount = 100e8;
-        uint256 dealId = _createERC20Deal(sender, receiver, networkConfig.usdcTokenAddress, amount);
+        string memory description = "Test deal";
+        uint256 dealId = _createERC20Deal(sender, receiver, networkConfig.usdcTokenAddress, amount, description);
 
         TypesLib.Deal memory deal = bloomEscrow.getDeal(dealId);
         _assertDeal(deal, sender, receiver, networkConfig.usdcTokenAddress, amount, TypesLib.Status.Pending);
@@ -124,7 +128,8 @@ contract BloomEscrowTest is Test {
 
     function testCreateDealWithETH() external {
         uint256 amount = 10e8;
-        uint256 dealId = _createETHDeal(sender, receiver, amount);
+        string memory description = "Test deal with ETH";
+        uint256 dealId = _createETHDeal(sender, receiver, amount, description);
 
         TypesLib.Deal memory deal = bloomEscrow.getDeal(dealId);
         _assertDeal(deal, sender, receiver, networkConfig.wethTokenAddress, amount, TypesLib.Status.Pending);
@@ -134,7 +139,8 @@ contract BloomEscrowTest is Test {
     }
 
     function testCancelDeal() external {
-        uint256 dealId = _createERC20Deal(sender, receiver, networkConfig.usdcTokenAddress, 100e8);
+        string memory description = "Test cancel deal";
+        uint256 dealId = _createERC20Deal(sender, receiver, networkConfig.usdcTokenAddress, 100e8, description);
         IERC20Mock token = IERC20Mock(networkConfig.usdcTokenAddress);
 
         // Receiver cannot cancel
@@ -155,7 +161,8 @@ contract BloomEscrowTest is Test {
     }
 
     function testAcknowledgeDeal() external {
-        uint256 dealId = _createERC20Deal(sender, receiver, networkConfig.usdcTokenAddress, 100e8);
+        string memory description = "Test acknowledge deal";
+        uint256 dealId = _createERC20Deal(sender, receiver, networkConfig.usdcTokenAddress, 100e8, description);
 
         // Only receiver can acknowledge
         vm.startPrank(sender);
@@ -175,7 +182,8 @@ contract BloomEscrowTest is Test {
     }
 
     function testUnacknowledgeDeal() external {
-        uint256 dealId = _createERC20Deal(sender, receiver, networkConfig.usdcTokenAddress, 100e8);
+        string memory description = "Test unacknowledge deal";
+        uint256 dealId = _createERC20Deal(sender, receiver, networkConfig.usdcTokenAddress, 100e8, description);
 
         // Receiver acknowledges
         vm.startPrank(receiver);
@@ -201,8 +209,8 @@ contract BloomEscrowTest is Test {
 
     function testFinalizeDealWithERC20() external {
         // The sender will finalize deal after they are done with their transactions with the receivers;
-
-        uint256 dealId = _createERC20Deal(sender, receiver, networkConfig.usdcTokenAddress, 100e8);
+        string memory description = "Test finalize deal";
+        uint256 dealId = _createERC20Deal(sender, receiver, networkConfig.usdcTokenAddress, 100e8, description);
 
         // Check balance of receiver before finalizing;
         IERC20Mock token = IERC20Mock(networkConfig.usdcTokenAddress);
@@ -229,7 +237,8 @@ contract BloomEscrowTest is Test {
      function testFinalizeDealAfterAcknowledgeWithERC20() external {
         // The sender will finalize deal after they are done with their transactions with the receivers;
 
-        uint256 dealId = _createERC20Deal(sender, receiver, networkConfig.usdcTokenAddress, 100e8);
+        string memory description = "Test finalize deal after acknowledge";
+        uint256 dealId = _createERC20Deal(sender, receiver, networkConfig.usdcTokenAddress, 100e8, description);
 
         // Receiver acknowledges;
         vm.startPrank(receiver);
@@ -260,8 +269,8 @@ contract BloomEscrowTest is Test {
 
     function testFinalizeDealWithETH() external {
         // The sender will finalize deal after they are done with their transactions with the receivers;
-
-        uint256 dealId = _createETHDeal(sender, receiver, 100e8);
+        string memory description = "Test finalize deal with ETH";
+        uint256 dealId = _createETHDeal(sender, receiver, 100e8, description);
 
         // Check balance of receiver before finalizing;
         uint256 balanceBefore = receiver.balance;

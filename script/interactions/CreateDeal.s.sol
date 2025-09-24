@@ -35,7 +35,7 @@ contract CreateDeal is Script {
 
         vm.startBroadcast(senderPrivateKey);
         token.approve(address(bloomEscrow), totalAmount);
-        bloomEscrow.createDeal(sender, receiver, tokenAddress, amount);
+        // bloomEscrow.createDeal(sender, receiver, tokenAddress, amount);
 
         vm.stopBroadcast();
     }

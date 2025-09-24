@@ -38,6 +38,7 @@ contract DisputeStorage {
 
     uint256 public disputeId;
     uint256 public constant MAX_PERCENT = 10_000; // 100%
+    uint256 public constant WAD = 1e18;
 
     uint256[] public allDisputes;
     mapping(uint256 => bool) public ongoingDisputes;
@@ -55,14 +56,12 @@ contract DisputeStorage {
     address public maxReputationJuror;
     address public maxScoreJuror;
 
+    uint256 maxStakeCap = 20_000_000e18; // → maximum stake we will count
+    uint256 stakeScale = 4_000_000e18; // → scaling constant for stake (instead of S)
+    uint256 reputationScale = 50; // → scaling constant for reputation (instead of R)
 
-
-    uint256 maxStakeCap;        // → maximum stake we will count
-    uint256 stakeScale;         // → scaling constant for stake (instead of S)
-    uint256 reputationScale;    // → scaling constant for reputation (instead of R)
-
-    uint256 stakeWeight;        // → weight of stake in score (percentage, 0–100)
-    uint256 reputationWeight;   // → weight of reputation in score (percentage, 0–100)
+    uint256 stakeWeight = 0.5e18; // → weight of stake in score (percentage, 0–100)
+    uint256 reputationWeight = 0.5e18; // → weight of reputation in score (percentage, 0–100)
 
     //////////////////////////
     // JURORS
@@ -87,6 +86,7 @@ contract DisputeStorage {
     mapping(address jurorAddress => uint256) public ongoingDisputeCount;
     mapping(address jurorAddress => uint256 index) public jurorAddressIndex;
 
+    mapping(uint256 disputeId => address) public tieBreakerJuror;
     mapping(address jurorAddress => mapping(address tokenAddress => uint256)) public jurorTokenPayments;
     mapping(address jurorAddress => mapping(address tokenAddress => uint256)) public jurorTokenPaymentsClaimed;
     mapping(uint256 disputeId => mapping(address jurorAddress => TypesLib.PaymentType)) public disputeToJurorPayment;
@@ -98,8 +98,6 @@ contract DisputeStorage {
     //////////////////////////
     // CANDIDATES & VOTING
     //////////////////////////
-    uint256 public alphaFP = 0.4e18;
-    uint256 public betaFP = 0.6e18;
     uint256 public thresholdPercent = 6000; // 60% (top 40% will be in the experienced pool)
     uint256 public appealThreshold = 3;
     uint256 public missedVoteThreshold = 3;
@@ -108,6 +106,7 @@ contract DisputeStorage {
     uint256 public k = 5;
     uint256 public noVoteK = 8;
     uint256 public votingPeriod = block.chainid == 31337 ? 48 hours : 15 minutes;
+    uint256 public tieBreakingDuration = 1 days;
 
     mapping(uint256 disputeId => address[] jurorAddresses) public disputeJurors;
     mapping(uint256 disputeId => mapping(address jurorAddress => TypesLib.Candidate)) public isDisputeCandidate;
@@ -130,7 +129,7 @@ contract DisputeStorage {
     //////////////////////////
 
     uint256 public minStakeAmount = 1000e18;
-    uint256 public maxStakeAmount = 1_000_000_000e18;
+    uint256 public maxStakeAmount = 1_000_000e18;
     uint256 public slashPercentage = 1000; // 10%
     uint256 public noVoteSlashPercentage = 2000; // 20%
     uint256 public maxSlashPercentage = 5000; // 50%
@@ -142,7 +141,7 @@ contract DisputeStorage {
 
     uint32 public callbackGasLimit = 1_600_000;
     uint16 public requestConfirmations = 3;
-    uint32 public numWords = 1;
+    uint32 public numWords = 2;
     address public linkAddress;
     address public wrapperAddress;
 
@@ -256,6 +255,7 @@ contract DisputeStorage {
         return allDisputes;
     }
 
+
     //////////////////////////
     // STATE-CHANGING FUNCTIONS
     //////////////////////////
@@ -271,6 +271,10 @@ contract DisputeStorage {
 
     function setDealToDispute(uint256 _dealId, uint256 _disputeId) external {
         dealToDispute[_dealId] = _disputeId;
+    }
+
+    function setTieBreakJuror(uint256 _disputeId, address _jurorAddress) external{
+        tieBreakerJuror[_disputeId] = _jurorAddress;
     }
 
     function updateDisputeWinner(uint256 _disputeId, address _winner) external {
@@ -340,11 +344,11 @@ contract DisputeStorage {
         jurors[_jurorAddress].stakeAmount = _stakeAmount;
     }
 
-    function balanceMaxScore(address _jurorAddress) external{
-        if(jurors[_jurorAddress].score > maxScore){
+    function balanceMaxScore(address _jurorAddress) external {
+        if (jurors[_jurorAddress].score > maxScore) {
             maxScore = jurors[_jurorAddress].score;
             maxScoreJuror = _jurorAddress;
-        } else if (_jurorAddress == maxScoreJuror && jurors[_jurorAddress].score < maxScore){
+        } else if (_jurorAddress == maxScoreJuror && jurors[_jurorAddress].score < maxScore) {
             _rebalanceMaxScore();
         }
     }
@@ -354,10 +358,9 @@ contract DisputeStorage {
     }
 
     function updateJurorScore(address _jurorAddress) external {
-       TypesLib.Juror memory juror = jurors[_jurorAddress];
+        TypesLib.Juror memory juror = jurors[_jurorAddress];
         uint256 newScore = computeScore(juror.stakeAmount, juror.reputation);
         jurors[_jurorAddress].score = newScore;
-      
     }
 
     function updateCandidateMissedStatus(uint256 _disputeId, address _jurorAddress, bool _status) external {
@@ -402,30 +405,12 @@ contract DisputeStorage {
 
     function computeScore(uint256 _stakeAmount, uint256 _reputation) public view returns (uint256) {
         uint256 stakeUsed = _stakeAmount > maxStakeCap ? maxStakeCap : _stakeAmount;
-        uint256 stakeScore = (stakeUsed ) / (stakeUsed + stakeScale);
-        uint256 reputationScore = (_reputation ) / (_reputation + reputationScale);
+        uint256 stakeScore = (stakeUsed * WAD) / (stakeUsed + stakeScale);
+        uint256 reputationScore = (_reputation * WAD) / (_reputation + reputationScale);
 
-        uint256 score =  (stakeWeight * stakeScore) + (reputationWeight * reputationScore);
+        uint256 score = (stakeWeight * stakeScore) / WAD + (reputationWeight * reputationScore) / WAD;
         return score;
     }
-
-
-
-    function updateMaxScore(uint256 score) external {
-        if (score > maxScore) {
-            maxScore = score;
-        }
-    }
-
-    function updateMaxValues(uint256 stakeAmount, uint256 score) external {
-        if (stakeAmount > maxStake) {
-            maxStake = stakeAmount;
-        }
-        if (score > maxScore) {
-            maxScore = score;
-        }
-    }
-
 
     function pushIntoDealEvidences(uint256 _dealId, address _ownerAddress, TypesLib.Evidence memory _evidence)
         external
@@ -503,18 +488,15 @@ contract DisputeStorage {
         emit StandardVotingDurationExtended(_disputeId, _extendDuration);
     }
 
-
-
     function _rebalanceMaxScore() internal {
-
         uint256 maxScoreTemp;
         address maxScoreJurorTemp;
 
-        for (uint256 i = 0; i < allJurorAddresses.length; i++){
+        for (uint256 i = 0; i < allJurorAddresses.length; i++) {
             address jurorAddress = allJurorAddresses[i];
             TypesLib.Juror memory juror = jurors[jurorAddress];
 
-            if (juror.score > maxScoreTemp){
+            if (juror.score > maxScoreTemp) {
                 maxScoreTemp = juror.score;
                 maxScoreJurorTemp = jurorAddress;
             }
@@ -522,8 +504,6 @@ contract DisputeStorage {
         maxScore = maxScoreTemp;
         maxScoreJuror = maxScoreJurorTemp;
     }
-
-
 
     //////////////////////////
     // TESTING/CONFIG

@@ -52,9 +52,8 @@ contract BloomEscrow is ReentrancyGuard, EscrowTokens {
     mapping(uint256 => TypesLib.Deal) public deals;
     mapping(address => uint256) public tokenToEscrowFee;
     mapping(address => uint256) public tokenToEscrowFeeClaimed;
+    mapping(address => uint256[]) public creatorToDeals;
 
-
-    
 
     uint256 public dealCount;
     address public disputeManagerAddress;
@@ -104,7 +103,7 @@ contract BloomEscrow is ReentrancyGuard, EscrowTokens {
         feeControllerAddress = _feeControllerAddress;
     }
 
-    function createDeal(address sender, address receiver, address tokenAddress, uint256 amount)
+    function createDeal(address sender, address receiver, address tokenAddress, uint256 amount, string calldata description)
         external
         payable
         nonReentrant
@@ -131,6 +130,7 @@ contract BloomEscrow is ReentrancyGuard, EscrowTokens {
             sender: sender,
             receiver: receiver,
             amount: amount,
+            description: description,
             tokenAddress: tokenAddress,
             status: TypesLib.Status.Pending,
             id: dealCount
@@ -138,6 +138,7 @@ contract BloomEscrow is ReentrancyGuard, EscrowTokens {
 
         // Store the deal
         deals[dealCount] = newDeal;
+        creatorToDeals[sender].push(dealCount);
         dealCount++;
 
         uint256 totalAmount = amount;
@@ -160,6 +161,7 @@ contract BloomEscrow is ReentrancyGuard, EscrowTokens {
             IERC20 token = IERC20(tokenAddress);
             token.safeTransferFrom(sender, address(this), totalAmount);
         }
+
 
         emit DealCreated(dealCount, sender, receiver, totalAmount, tokenAddress);
     }
@@ -302,4 +304,9 @@ contract BloomEscrow is ReentrancyGuard, EscrowTokens {
         emit EscrowFeeClaimed(msg.sender, tokenAddress, amount);
 
     }
+
+    function getDeals(address creator) external view returns (uint256[] memory) {
+        return creatorToDeals[creator];
+    }
+
 }

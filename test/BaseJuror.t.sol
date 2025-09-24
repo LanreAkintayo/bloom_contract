@@ -111,6 +111,11 @@ contract BaseJuror is Test {
         feeController.addToDataFeed(networkConfig.wethTokenAddress, networkConfig.ethUsdPriceFeed);
         vm.stopPrank();
 
+        // Configure DisputeManager
+        vm.startPrank(disputeManager.owner());
+        disputeManager.addJurorManager(address(jurorManager));
+        vm.stopPrank();
+
         // 8. Test actors
         sender = makeAddr("sender");
         receiver = makeAddr("receiver");

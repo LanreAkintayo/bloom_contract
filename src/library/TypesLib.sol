@@ -17,6 +17,7 @@ library TypesLib {
         address sender;
         address receiver;
         uint256 amount;
+        string description;
         address tokenAddress; // Address(0) for native currency
         Status status;
         uint256 id;
@@ -54,6 +55,7 @@ library TypesLib {
         address sender;
         address receiver;
         address winner;
+        string description;
         uint256 dealId;
         uint256 disputeFee;
         address feeTokenAddress;

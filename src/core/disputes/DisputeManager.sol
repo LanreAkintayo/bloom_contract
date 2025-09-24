@@ -8,8 +8,9 @@ import {IBloomEscrow} from "../../interfaces/IBloomEscrow.sol";
 import {IFeeController} from "../../interfaces/IFeeController.sol";
 import {ConfirmedOwner} from "@chainlink/contracts/src/v0.8/shared/access/ConfirmedOwner.sol";
 import {DisputeStorage} from "./DisputeStorage.sol";
-// import {console} from "forge-std/Test.sol";
+import {console} from "forge-std/Test.sol";
 import {TypesLib} from "../../library/TypesLib.sol";
+import {JurorManager} from "./JurorManager.sol";
 
 /// @title Dispute Manager for Bloom Escrow
 /// @notice Handles disputes and evidence for deals in BloomEscrow
@@ -20,6 +21,7 @@ contract DisputeManager is ConfirmedOwner {
     IBloomEscrow public bloomEscrow;
     IFeeController public feeController;
     IERC20 public bloomToken;
+    JurorManager public jurorManager;
 
     uint256 public constant MAX_PERCENT = 10_000;
 
@@ -66,7 +68,6 @@ contract DisputeManager is ConfirmedOwner {
     event RewardClaimed(address jurorAddress, address tokenAddress, uint256 amount);
     event AdminParticipatedInDispute(uint256 indexed _disputeId, address indexed support);
 
-
     //////////////////////////
     // CONSTRUCTOR
     //////////////////////////
@@ -84,7 +85,7 @@ contract DisputeManager is ConfirmedOwner {
 
     /// @notice Opens a dispute for a given deal
     /// @param dealId The ID of the deal
-    function openDispute(uint256 dealId) external returns (uint256) {
+    function openDispute(uint256 dealId, string calldata description) external returns (uint256, uint256) {
         TypesLib.Deal memory deal = bloomEscrow.getDeal(dealId);
 
         // You cannot open a dispute if one is already opened for this deal
@@ -128,6 +129,7 @@ contract DisputeManager is ConfirmedOwner {
             sender: deal.sender,
             receiver: deal.receiver,
             winner: address(0),
+            description: description,
             dealId: dealId,
             disputeFee: disputeFee,
             feeTokenAddress: deal.tokenAddress
@@ -147,8 +149,13 @@ contract DisputeManager is ConfirmedOwner {
         // update the deal status to Disputed
         bloomEscrow.updateStatus(dealId, TypesLib.Status.Disputed);
 
+        // Select jurors;
+        uint256 requestId = jurorManager.selectJurors(newDisputeId);
+
+        console.log("Request ID: ", requestId);
+
         emit DisputeOpened(dealId, msg.sender);
-        return newDisputeId;
+        return (newDisputeId, requestId);
     }
 
     function closeDispute(uint256 _disputeId) external {
@@ -171,7 +178,7 @@ contract DisputeManager is ConfirmedOwner {
         emit DisputeClosed(_disputeId, msg.sender);
     }
 
-    function appeal(uint256 _disputeId) external returns (uint256) {
+    function appeal(uint256 _disputeId, string calldata description) external returns (uint256, uint256) {
         uint256[] memory allDisputeAppeals = ds.getDisputeAppeals(_disputeId);
 
         // Always make use of the last dispute which would represent the last appeal
@@ -191,6 +198,11 @@ contract DisputeManager is ConfirmedOwner {
         // Timer memory appealDisputeTimer = disputeTimer[latestId];
         uint256 endTime =
             appealDisputeTimer.startTime + appealDisputeTimer.standardVotingDuration + appealDisputeTimer.extendDuration;
+        
+        if (ds.tieBreakerJuror(latestId) != address(0)){
+            endTime += ds.tieBreakingDuration();
+        }
+
         if (block.timestamp < endTime) {
             revert DisputeManager__NotFinished();
         }
@@ -231,6 +243,7 @@ contract DisputeManager is ConfirmedOwner {
             sender: deal.sender,
             receiver: deal.receiver,
             winner: address(0),
+            description: description,
             dealId: dealId,
             disputeFee: appealFee,
             feeTokenAddress: deal.tokenAddress
@@ -248,13 +261,15 @@ contract DisputeManager is ConfirmedOwner {
         ds.setAppealToDispute(newDisputeId, _disputeId);
         // appealToDispute[disputeId] = _disputeId; // Appeal id is the disputeId, the _disputeId is passed from the function
 
+        // Select Jurors;
+         // Select jurors;
+        uint256 requestId = jurorManager.selectJurors(newDisputeId);
+
         // Emit an event
         emit DisputeAppealed(dealId, newDisputeId, msg.sender);
 
-        return newDisputeId;
+        return (newDisputeId, requestId);
     }
-
-    
 
     function releaseFundsToWinner(uint256 _disputeId) external {
         // Wait for 24 hours to see whether there will be appeal
@@ -389,5 +404,9 @@ contract DisputeManager is ConfirmedOwner {
     function isInActiveJurorAddresses(address _jurorAddress) internal view returns (bool) {
         // return ds.activeJurorAddresses(jurorAddressIndex(_jurorAddress))
         return ds.isInActiveJurorAddresses(_jurorAddress);
+    }
+
+    function addJurorManager(address jurorManagerAddress) external onlyOwner {
+        jurorManager = JurorManager(jurorManagerAddress);
     }
 }
