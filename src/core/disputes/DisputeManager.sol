@@ -207,6 +207,10 @@ contract DisputeManager is ConfirmedOwner {
             revert DisputeManager__NotFinished();
         }
 
+        console.log("End time: ", endTime);
+        console.log("block.timestamp: ", block.timestamp);
+        console.log("Appeal duration: ", ds.appealDuration());
+
         if (block.timestamp > endTime + ds.appealDuration()) {
             revert DisputeManager__AppealExpired();
         }
@@ -251,18 +255,16 @@ contract DisputeManager is ConfirmedOwner {
 
         ds.setDisputes(newDisputeId, dispute);
 
-        // disputes[disputeId] = dispute;
+        ds.updateAllDisputes(newDisputeId);
+
 
         // Link the dispute Id to the appeal
-
         ds.pushIntoDisputeAppeals(_disputeId, newDisputeId);
-        // disputeAppeals[_disputeId].push(disputeId);
 
         ds.setAppealToDispute(newDisputeId, _disputeId);
         // appealToDispute[disputeId] = _disputeId; // Appeal id is the disputeId, the _disputeId is passed from the function
 
         // Select Jurors;
-         // Select jurors;
         uint256 requestId = jurorManager.selectJurors(newDisputeId);
 
         // Emit an event
@@ -323,6 +325,7 @@ contract DisputeManager is ConfirmedOwner {
             IERC20(tokenAddress).safeTransfer(msg.sender, amount);
         }
 
+        ds.updateJurorTokenPaymentsClaimed(msg.sender, tokenAddress, amount);
         // jurorTokenPaymentsClaimed[msg.sender][tokenAddress] += amount;
 
         emit RewardClaimed(msg.sender, tokenAddress, amount);

@@ -6,6 +6,8 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IBloomEscrow} from "../../interfaces/IBloomEscrow.sol";
 import {IFeeController} from "../../interfaces/IFeeController.sol";
 import {TypesLib} from "../../library/TypesLib.sol";
+import {console} from "forge-std/Test.sol";
+
 
 contract DisputeStorage {
     //////////////////////////
@@ -56,8 +58,8 @@ contract DisputeStorage {
     address public maxReputationJuror;
     address public maxScoreJuror;
 
-    uint256 maxStakeCap = 20_000_000e18; // → maximum stake we will count
-    uint256 stakeScale = 4_000_000e18; // → scaling constant for stake (instead of S)
+    uint256 maxStakeCap = 10_000_000e18; // → maximum stake we will count
+    uint256 stakeScale = 2_000_000e18; // → scaling constant for stake (instead of S)
     uint256 reputationScale = 50; // → scaling constant for reputation (instead of R)
 
     uint256 stakeWeight = 0.5e18; // → weight of stake in score (percentage, 0–100)
@@ -139,7 +141,7 @@ contract DisputeStorage {
     // CHAINLINK VRF
     //////////////////////////
 
-    uint32 public callbackGasLimit = 1_600_000;
+    uint32 public callbackGasLimit = 1_800_000;
     uint16 public requestConfirmations = 3;
     uint32 public numWords = 2;
     address public linkAddress;
@@ -158,6 +160,24 @@ contract DisputeStorage {
     //////////////////////////
     // VIEW FUNCTIONS
     //////////////////////////
+
+    function getJurorComposition(uint256 _disputeId, uint256 _appealId) external view returns(uint256 expNeeded, uint256 newbieNeeded) {
+        uint256[] memory appeals = disputeAppeals[_disputeId];
+
+        if (appeals.length == 0){
+            console.log("Juror Composition: Original Dispute");
+            expNeeded = 3;
+            newbieNeeded = 2;
+        } else if (appeals[0] == _appealId) {
+            console.log("Juror Composition: First appeal");
+            expNeeded = 4;
+            newbieNeeded = 3;
+        } else if (appeals[1] == _appealId){
+            console.log("Juror Composition: Second appeal");
+            expNeeded = 5;
+            newbieNeeded = 4;
+        }
+    }
 
     function getExperiencedPool() external view returns (address[] memory) {
         return experiencedPool;
@@ -373,6 +393,11 @@ contract DisputeStorage {
 
     function updateJurorTokenPayments(address _jurorAddress, address _tokenAddress, uint256 _amount) external {
         jurorTokenPayments[_jurorAddress][_tokenAddress] = _amount;
+    }
+
+    function updateJurorTokenPaymentsClaimed(address _jurorAddress, address _tokenAddress, uint256 _amount) external {
+        jurorTokenPaymentsClaimed[_jurorAddress][_tokenAddress] += _amount;
+
     }
 
     function updateDisputeToJurorPayment(

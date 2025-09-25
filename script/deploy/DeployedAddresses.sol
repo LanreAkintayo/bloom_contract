@@ -18,7 +18,7 @@ library DeployedAddresses {
     function getLastBloom(uint256 chainId) internal pure returns (address) {
         // Sepolia
         if (chainId == 11155111) {
-            return 0x4138941D4b55b864ceC671E6737636107587c695; // latest deployment
+            return 0x0De2fBE02b6D68FC92784ccae46A127c5E17c48C; // latest deployment
         }
         revert("No Bloom deployment found for this network");
     }
@@ -34,7 +34,7 @@ library DeployedAddresses {
 
     function getLastFeeController(uint256 chainId) internal pure returns (address) {
         if (chainId == 11155111) {
-            return 0x5e2CB57026c867726BDAa92C0C4866D599AAb4f9; // latest deployment
+            return 0x957e9EE41B130456425fFa9724aFA9cDc0A24C57; // latest deployment
         }
         revert("No FeeController deployment found for this network");
     }
@@ -50,7 +50,7 @@ library DeployedAddresses {
 
     function getLastBloomEscrow(uint256 chainId) internal pure returns (address) {
         if (chainId == 11155111) {
-            return 0x834f25Ef3D695C888d0792F17024fe7F2fE0c822; // latest deployment
+            return 0xBd304f7D8d0F33760b7bf410d356854Da40B2231; // latest deployment
         }
         revert("No FeeController deployment found for this network");
     }
@@ -66,7 +66,7 @@ library DeployedAddresses {
 
     function getLastJurorManager(uint256 chainId) internal pure returns (address) {
         if (chainId == 11155111) {
-            return 0xcBB6C09Bf38AC494F54F19A0C18cc4727A47e29E; // latest deployment
+            return 0x5a61c265B813981351a9baCd687C068Cd6c2C22f; // latest deployment
         }
         revert("No FeeController deployment found for this network");
     }
@@ -81,7 +81,7 @@ library DeployedAddresses {
 
     function getLastDisputeStorage(uint256 chainId) internal pure returns (address) {
         if (chainId == 11155111) {
-            return 0xc550bf851EC14F163AEcEfB2383bAFA78e9968C1; // latest deployment
+            return 0x3942B4b553c2E376B1104B715531B724d9f5f547; // latest deployment
         }
         revert("No Dispute storage deployment found for this network");
     }
@@ -96,7 +96,7 @@ library DeployedAddresses {
 
     function getLastDisputeManager(uint256 chainId) internal pure returns (address) {
         if (chainId == 11155111) {
-            return 0xf1587D5265eb6147D4f4E758c01b0e9BD460e8fc; // latest deployment
+            return 0x51012d5523D0b9B6A5b59CEF9DcDd03ab46aa67e; // latest deployment
         }
         revert("No Dispute manager deployment found for this network");
     }

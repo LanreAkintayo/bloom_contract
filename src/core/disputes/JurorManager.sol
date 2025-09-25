@@ -42,7 +42,6 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, AutomationCom
     mapping(uint256 => RequestType) private requestToType;
     mapping(uint256 => address[]) private poolToPickFrom;
 
-
     /*//////////////////////////////////////////////////////////////
                                 ERRORS
     //////////////////////////////////////////////////////////////*/
@@ -150,7 +149,6 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, AutomationCom
         TypesLib.Juror memory juror = ds.getJuror(msg.sender);
         if (juror.jurorAddress == address(0)) revert JurorManager__NotRegistered();
 
-
         if (additionalStake > ds.maxStakeAmount()) {
             revert JurorManager__ExceedMaxStake();
         }
@@ -179,16 +177,36 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, AutomationCom
         address[] memory disputeJurors = ds.getDisputeJurors(disputeId);
         if (disputeJurors.length > 0) revert JurorManager__AlreadyAssignedJurors();
 
+        uint256 originalDispute = ds.appealToDispute(disputeId);
+        uint256 neededDisputeId = originalDispute == 0 ? disputeId : originalDispute;
+        uint256 neededAppealId = originalDispute == 0 ? originalDispute : disputeId;
+
         // Define how many experienced and newbie jurors are needed
-        uint256 expNeeded = 2;
-        uint256 newbieNeeded = 1;
+        (uint256 expNeeded, uint256 newbieNeeded) = ds.getJurorComposition(neededDisputeId, neededAppealId);
+        uint256 total = expNeeded + newbieNeeded;
 
         // Get active pools once
         (address[] memory activeExperienced, address[] memory activeNewbies) = _getActivePools();
 
+        console.log("Active Experienced Jurors in select jurors:");
+        for (uint256 i = 0; i < activeExperienced.length; i++) {
+            console.log(activeExperienced[i]);
+        }
+
+        console.log("Active Newbie Jurors in select jurors:");
+        for (uint256 i = 0; i < activeNewbies.length; i++) {
+            console.log(activeNewbies[i]);
+        }
+
         // Pool size checks
-        if (activeExperienced.length < expNeeded) revert JurorManager__InsufficientExperienced();
-        if (activeNewbies.length < newbieNeeded) revert JurorManager__InsufficientNewbies();
+        if (activeExperienced.length < expNeeded) {
+            expNeeded = activeExperienced.length;
+            newbieNeeded = total - expNeeded;
+        }
+        if (activeNewbies.length < newbieNeeded) {
+            newbieNeeded = activeNewbies.length;
+            expNeeded = total - newbieNeeded;
+        }
 
         // Save requirements + snapshot of active pools
         experienceNeededByDispute[disputeId] = expNeeded;
@@ -230,23 +248,20 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, AutomationCom
             address[] memory activeExperienced = activeExperiencedByDispute[disputeId];
             address[] memory activeNewbies = activeNewbiesByDispute[disputeId];
 
+            // // Print activeExperienced and activeNewbies
+            // console.log("Active Experienced Jurors:");
+            // for (uint256 i = 0; i < activeExperienced.length; i++) {
+            //     console.log(activeExperienced[i]);
+            // }
 
-            // Print activeExperienced and activeNewbies
-            console.log("Active Experienced Jurors:");
-            for (uint256 i = 0; i < activeExperienced.length; i++) {
-                console.log(activeExperienced[i]);
-            }
-
-            console.log("Active Newbie Jurors:");
-            for (uint256 i = 0; i < activeNewbies.length; i++) {
-                console.log(activeNewbies[i]);
-            }
+            // console.log("Active Newbie Jurors:");
+            // for (uint256 i = 0; i < activeNewbies.length; i++) {
+            //     console.log(activeNewbies[i]);
+            // }
 
             // Select experienced and newbie jurors
             address[] memory selectedExperienced =
                 _selectJurors(expNeeded, _randomWords[0], activeExperienced, disputeId);
-
-
 
             address[] memory selectedNewbies = _selectJurors(newbieNeeded, _randomWords[1], activeNewbies, disputeId);
 
@@ -329,12 +344,17 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, AutomationCom
         newbies = new address[](activeJurorAddresses.length);
         uint256 newIndex;
 
+        // console.log("Max score: ", ds.maxScore());
+
         for (uint256 i = 0; i < activeJurorAddresses.length; i++) {
             TypesLib.Juror memory juror = ds.getJuror(activeJurorAddresses[i]); // jurors[activeJurorAddresses[i]];
 
             if (juror.stakeAmount >= ds.minStakeAmount()) {
                 uint256 score = juror.score;
                 uint256 thresholdScore = ds.thresholdPercent() * ds.maxScore() / MAX_PERCENT;
+
+                // console.log("Score: ", score);
+                // console.log("Threshold Score: ", thresholdScore);
 
                 if (score >= thresholdScore) {
                     experienced[expIndex++] = juror.jurorAddress;
@@ -390,7 +410,6 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, AutomationCom
                 // _popFromActiveJurorAddresses(jurorAddress);
             }
 
-
             // Swap-remove
             pool[pickIdx] = pool[pool.length - 1];
             assembly {
@@ -402,33 +421,106 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, AutomationCom
         }
     }
 
+    function _shrink(uint256[] memory arr, uint256 newLength) internal pure returns (uint256[] memory) {
+        uint256[] memory trimmed = new uint256[](newLength);
+        for (uint256 i; i < newLength; i++) {
+            trimmed[i] = arr[i];
+        }
+        return trimmed;
+    }
+
+    // function checkUpkeep(bytes calldata /*checkData*/ )
+    //     external
+    //     view
+    //     returns (bool upkeepNeeded, bytes memory performData)
+    // {
+    //     uint256[] memory allDisputes = ds.getAllDisputes();
+    //     uint256[] memory disputesToExtend = new uint256[](allDisputes.length);
+    //     uint256[] memory disputesToFinish = new uint256[](allDisputes.length);
+
+    //     uint256 finishCount = 0;
+    //     uint256 extendCount = 0;
+
+    //     for (uint256 i = 0; i < allDisputes.length; i++) {
+    //         uint256 disputeId = allDisputes[i];
+
+    //         // Skip disputes that are no longer in voting
+    //         if (!ds.ongoingDisputes(disputeId)) continue;
+
+    //         // Get timer and dispute info
+    //         TypesLib.Timer memory timer = ds.getDisputeTimer(disputeId);
+    //         TypesLib.Dispute memory dispute = ds.getDispute(disputeId);
+
+    //         // Case 1: Check for extension
+    //         if (timer.extendDuration == 0 && block.timestamp > timer.startTime + timer.standardVotingDuration) {
+    //             uint256 confirmedVotes = _getConfirmedVotes(disputeId);
+    //             uint256 quorum = ds.getDisputeJurors(disputeId).length - 2;
+    //             if (confirmedVotes < quorum) {
+    //                 disputesToExtend[extendCount++] = disputeId;
+    //                 continue;
+    //             }
+    //         }
+
+    //         // Case 2: Check for finish
+    //         uint256 endTime = timer.startTime + timer.standardVotingDuration + timer.extendDuration;
+    //         address tieBreaker = ds.tieBreakerJuror(disputeId);
+    //         if (tieBreaker != address(0)) {
+    //             endTime += ds.tieBreakingDuration();
+    //         }
+    //         if (block.timestamp > endTime) {
+    //             if (dispute.winner == address(0)) {
+    //                 disputesToFinish[finishCount++] = disputeId;
+    //             }
+    //         }
+    //     }
+
+    //     if (extendCount > 0 || finishCount > 0) {
+    //         upkeepNeeded = true;
+    //         performData = abi.encode(_shrink(disputesToExtend, extendCount), _shrink(disputesToFinish, finishCount));
+    //     } else {
+    //         upkeepNeeded = false;
+    //         performData = "";
+    //     }
+    // }
+
     function checkUpkeep(bytes calldata /*checkData*/ )
         external
         view
         returns (bool upkeepNeeded, bytes memory performData)
     {
         uint256[] memory allDisputes = ds.getAllDisputes();
-        uint256[] memory disputesToExtend = new uint256[](allDisputes.length);
-        uint256[] memory disputesToFinish = new uint256[](allDisputes.length);
+        uint256 total = allDisputes.length;
 
-        uint256 finishCount = 0;
-        uint256 extendCount = 0;
+        uint256[] memory disputesToExtend = new uint256[](total);
+        uint256[] memory disputesToFinish = new uint256[](total);
 
-        for (uint256 i = 0; i < allDisputes.length; i++) {
+        uint256 extendCount;
+        uint256 finishCount;
+
+        for (uint256 i; i < total; i++) {
             uint256 disputeId = allDisputes[i];
-
-            // Skip disputes that are no longer in voting;
             if (!ds.ongoingDisputes(disputeId)) continue;
 
-            // Get timer info;
             TypesLib.Timer memory timer = ds.getDisputeTimer(disputeId);
             TypesLib.Dispute memory dispute = ds.getDispute(disputeId);
 
             // Case 1: Check for extension
             if (timer.extendDuration == 0 && block.timestamp > timer.startTime + timer.standardVotingDuration) {
                 uint256 confirmedVotes = _getConfirmedVotes(disputeId);
-                uint256 quorum = ds.getDisputeJurors(disputeId).length - 2;
+                // uint256 quorum = ds.getDisputeJurors(disputeId).length - 2;
+
+                uint256 originalDispute = ds.appealToDispute(disputeId);
+                uint256 neededDisputeId = originalDispute == 0 ? disputeId : originalDispute;
+                uint256 neededAppealId = originalDispute == 0 ? originalDispute : disputeId;
+
+                (uint256 expNeeded, uint256 newbieNeeded) = ds.getJurorComposition(neededDisputeId, neededAppealId);
+                uint256 quorum = expNeeded + newbieNeeded - 2;
+
+                console.log("Confirmed Votes: ", confirmedVotes);
+                console.log("Quorum: ", quorum);
+
                 if (confirmedVotes < quorum) {
+                    console.log("abcd: To extend");
                     disputesToExtend[extendCount++] = disputeId;
                     continue;
                 }
@@ -440,24 +532,15 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, AutomationCom
             if (tieBreaker != address(0)) {
                 endTime += ds.tieBreakingDuration();
             }
-            if (block.timestamp > endTime) {
-                if (dispute.winner == address(0)) {
-                    disputesToFinish[finishCount++] = disputeId;
-                }
+            if (block.timestamp > endTime && dispute.winner == address(0)) {
+                disputesToFinish[finishCount++] = disputeId;
             }
         }
 
         if (extendCount > 0 || finishCount > 0) {
             upkeepNeeded = true;
-
-            // Trim arrays
-            assembly {
-                mstore(disputesToExtend, extendCount)
-                mstore(disputesToFinish, finishCount)
-            }
-
-            // Encode both arrays into performData
-            performData = abi.encode(disputesToExtend, disputesToFinish);
+            // shrink once at the end
+            performData = abi.encode(_shrink(disputesToExtend, extendCount), _shrink(disputesToFinish, finishCount));
         } else {
             upkeepNeeded = false;
             performData = "";
@@ -472,7 +555,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, AutomationCom
         }
 
         for (uint256 i = 0; i < toFinish.length; i++) {
-            console.log("Dispute ID to finish: ", toFinish[i]);
+            // console.log("Dispute ID to finish: ", toFinish[i]);
             _finishDispute(toFinish[i]);
         }
     }
@@ -496,10 +579,6 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, AutomationCom
 
         // Make sure that users cannot vote when time elapses.
         _validateTimeStamp(disputeId, timer);
-
-        if (block.timestamp > timer.startTime + timer.standardVotingDuration + timer.extendDuration) {
-            revert JurorManager__VotingPeriodExpired();
-        }
 
         // Check eligibility
         address[] memory jurors = ds.getDisputeJurors(disputeId);
@@ -578,17 +657,20 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, AutomationCom
         }
 
         // Select a random juror
-        // Get the list of active newbies and experienced jurors;
-        (address[] memory activeExperienced, address[] memory activeNewbies) = _getActivePools();
 
-        // Pool size checks
-        if (activeExperienced.length > 1) {
-            poolToPickFrom[_disputeId] = activeExperienced;
-        } else if (activeNewbies.length > 1) {
-            poolToPickFrom[_disputeId] = activeNewbies;
-        } else {
-            revert JurorManager__InsufficientJurors();
-        }
+        poolToPickFrom[_disputeId] = ds.getActiveJurorAddresses();
+
+        // Get the list of active newbies and experienced jurors;
+        // (address[] memory activeExperienced, address[] memory activeNewbies) = _getActivePools();
+
+        // // Pool size checks
+        // if (activeExperienced.length > 1) {
+        //     poolToPickFrom[_disputeId] = activeExperienced;
+        // } else if (activeNewbies.length > 1) {
+        //     poolToPickFrom[_disputeId] = activeNewbies;
+        // } else {
+        //     revert JurorManager__InsufficientJurors();
+        // }
 
         // Request randomness from Chainlink VRF
         uint256 requestId = requestRandomness(ds.callbackGasLimit(), ds.requestConfirmations(), 1);
