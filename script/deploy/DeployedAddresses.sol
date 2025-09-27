@@ -81,7 +81,7 @@ library DeployedAddresses {
 
     function getLastDisputeStorage(uint256 chainId) internal pure returns (address) {
         if (chainId == 11155111) {
-            return 0x3942B4b553c2E376B1104B715531B724d9f5f547; // latest deployment
+            return 0x7a889E02F4831D29E076B31Ac180219c12B3c2D9; // latest deployment
         }
         revert("No Dispute storage deployment found for this network");
     }
