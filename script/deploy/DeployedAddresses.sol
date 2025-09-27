@@ -34,7 +34,7 @@ library DeployedAddresses {
 
     function getLastFeeController(uint256 chainId) internal pure returns (address) {
         if (chainId == 11155111) {
-            return 0x957e9EE41B130456425fFa9724aFA9cDc0A24C57; // latest deployment
+            return 0x833323b50e6Bd3063835C6534DA38bCc0eb19845; // latest deployment
         }
         revert("No FeeController deployment found for this network");
     }
@@ -50,7 +50,7 @@ library DeployedAddresses {
 
     function getLastBloomEscrow(uint256 chainId) internal pure returns (address) {
         if (chainId == 11155111) {
-            return 0xBd304f7D8d0F33760b7bf410d356854Da40B2231; // latest deployment
+            return 0x4e3074E3c1eDC632eD0755658FBdD46F29830D01; // latest deployment
         }
         revert("No FeeController deployment found for this network");
     }
@@ -66,7 +66,7 @@ library DeployedAddresses {
 
     function getLastJurorManager(uint256 chainId) internal pure returns (address) {
         if (chainId == 11155111) {
-            return 0x5a61c265B813981351a9baCd687C068Cd6c2C22f; // latest deployment
+            return 0xEd665981988b6Ad8Dfb05Dd380EEcD44C933e415; // latest deployment
         }
         revert("No FeeController deployment found for this network");
     }
@@ -96,7 +96,7 @@ library DeployedAddresses {
 
     function getLastDisputeManager(uint256 chainId) internal pure returns (address) {
         if (chainId == 11155111) {
-            return 0x51012d5523D0b9B6A5b59CEF9DcDd03ab46aa67e; // latest deployment
+            return 0x167883e884087b7eC704C07CD5e0d593ABDafA9C; // latest deployment
         }
         revert("No Dispute manager deployment found for this network");
     }
