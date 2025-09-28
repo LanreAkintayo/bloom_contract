@@ -172,7 +172,7 @@ contract BloomEscrow is ReentrancyGuard, EscrowTokens {
         TypesLib.Deal storage deal = deals[id];
 
         if (deal.status != TypesLib.Status.Pending) {
-            revert BloomEscrow__NotPending();git 
+            revert BloomEscrow__NotPending();
         }
 
         deal.status = TypesLib.Status.Acknowledged;
