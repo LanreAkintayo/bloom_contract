@@ -25,14 +25,11 @@ contract DeployAll is Script {
         uint256 deployerKey = vm.envUint("PRIVATE_KEY");
         address deployer = vm.addr(deployerKey);
 
-        // 1. Deploy Bloom
-        DeployBloom deployBloom = new DeployBloom();
-        (Bloom bloom, HelperConfig helperConfig) = deployBloom.run();
-        networkConfig = helperConfig.getConfigByChainId(block.chainid);
-
+        
         // 2. Deploy FeeController
         DeployFeeController deployFeeController = new DeployFeeController();
-        (FeeController feeController,) = deployFeeController.run();
+        (FeeController feeController, HelperConfig helperConfig) = deployFeeController.run();
+        networkConfig = helperConfig.getConfigByChainId(block.chainid);
 
         // 3. Deploy BloomEscrow
         DeployBloomEscrow deployBloomEscrow = new DeployBloomEscrow();
@@ -43,7 +40,7 @@ contract DeployAll is Script {
         (DisputeStorage disputeStorage,) = deployDisputeStorage.deploy(
             address(bloomEscrow),
             address(feeController),
-            address(bloom),
+            networkConfig.bloomTokenAddress,
             networkConfig.wrappedNativeTokenAddress,
             helperConfig
         );
@@ -58,7 +55,7 @@ contract DeployAll is Script {
             address(disputeStorage), networkConfig.linkAddress, networkConfig.wrapperAddress, helperConfig
         );
 
-        console2.log("Bloom deployed at:", address(bloom));
+        console2.log("Bloom deployed at:", networkConfig.bloomTokenAddress);
         console2.log("FeeController deployed at:", address(feeController));
         console2.log("BloomEscrow deployed at:", address(bloomEscrow));
         console2.log("JurorManager deployed at:", address(jurorManager));

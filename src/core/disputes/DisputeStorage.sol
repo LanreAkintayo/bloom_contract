@@ -107,7 +107,7 @@ contract DisputeStorage {
     uint256 public lambda = 0.2e18; // Smoothing factor scaled by 1e18
     uint256 public k = 5;
     uint256 public noVoteK = 8;
-    uint256 public votingPeriod = block.chainid == 31337 ? 48 hours : 15 minutes;
+    uint256 public votingPeriod = block.chainid == 31337 ? 48 hours : 2 hours;
     uint256 public tieBreakingDuration = 1 days;
 
     mapping(uint256 disputeId => address[] jurorAddresses) public disputeJurors;
@@ -536,5 +536,16 @@ contract DisputeStorage {
 
     function changeCallbackGasLimit(uint32 _callbackGasLimit) external {
         callbackGasLimit = _callbackGasLimit;
+    }
+
+    function changeVotingPeriod(uint256 _votingPeriod) external {
+        votingPeriod = _votingPeriod;
+    }
+    function changeTieBreakingDuration(uint256 _tieBreakingDuration) external {
+        tieBreakingDuration = _tieBreakingDuration;
+    }
+
+    function changeExtendDuration(uint256 _extendDuration) external {
+        extendingDuration = _extendDuration;
     }
 }

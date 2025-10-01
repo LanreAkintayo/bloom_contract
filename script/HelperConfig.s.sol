@@ -102,7 +102,7 @@ contract HelperConfig is CodeConstants, Script {
             wethTokenAddress: 0xC558DBdd856501FCd9aaF1E62eae57A9F0629a3c,
             linkAddress: 0x779877A7B0D9E8603169DdbD7836e478b4624789,
             wrapperAddress: 0xab18414CD93297B0d12ac29E63Ca20f515b3DB46,
-            bloomTokenAddress: 0x4138941D4b55b864ceC671E6737636107587c695,
+            bloomTokenAddress: 0xc4E523B7d26186eC7f1dCBed8a64DaBDE795C98E,
             wrappedNativeTokenAddress: 0xC558DBdd856501FCd9aaF1E62eae57A9F0629a3c
         });
         return sepoliaConfig;

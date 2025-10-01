@@ -89,6 +89,32 @@ contract JurorManagerTest is BaseJuror {
         return (disputeId, requestId);
     }
 
+
+       function _openDisputeWithoutFulfilling(address _sender, uint256 dealId, string memory description)
+        internal
+        returns (uint256, uint256)
+    {
+        // Send LinkToken to the JurorManager contract
+        LinkToken linkToken = LinkToken(networkConfig.linkAddress);
+        vm.prank(address(helperConfig));
+        linkToken.mint(address(jurorManager), 10000e18);
+
+        TypesLib.Deal memory deal = bloomEscrow.getDeal(dealId);
+
+        address tokenAddress = deal.tokenAddress;
+        IERC20Mock token = IERC20Mock(tokenAddress);
+        uint256 dealAmount = deal.amount;
+        uint256 disputeFee = feeController.calculateDisputeFee(dealAmount);
+
+        vm.startPrank(_sender);
+        token.approve(address(disputeManager), disputeFee);
+        (uint256 disputeId, uint256 requestId) = disputeManager.openDispute(dealId, description);
+        vm.stopPrank();
+
+        return (disputeId, requestId);
+    }
+
+
     // function _selectJurors(uint256 _disputeId, uint256 expNeeded, uint256 newbieNeeded) internal {
     //     uint256 thresholdFP;
     //     uint256 alphaFP = 0.6e18; // Stake is stronger
@@ -288,17 +314,19 @@ contract JurorManagerTest is BaseJuror {
         uint256 dealId = _createERC20Deal(sender, receiver, daiTokenAddress, dealAmount, description);
 
         // Then you should be able to open a dispute;
+        _openDisputeWithoutFulfilling(sender, dealId, description);
+         _openDisputeWithoutFulfilling(sender, dealId, description);
         (uint256 disputeId, uint256 requestId) = _openDispute(sender, dealId, description);
 
         //  //     // Then call fulfillRandomWords
-        VRFV2Wrapper wrapper = helperConfig.getVRFV2Wrapper();
-        VRFCoordinatorV2Mock vrfCoordinator = helperConfig.getVRFCoordinator();
-        vm.prank(address(helperConfig));
-        vrfCoordinator.fulfillRandomWords(requestId, address(wrapper));
+        // VRFV2Wrapper wrapper = helperConfig.getVRFV2Wrapper();
+        // VRFCoordinatorV2Mock vrfCoordinator = helperConfig.getVRFCoordinator();
+        // vm.prank(address(helperConfig));
+        // vrfCoordinator.fulfillRandomWords(requestId, address(wrapper));
 
         // Let's use juror 1
-        uint256 expNeeded = 2;
-        uint256 newbieNeeded = 1;
+        uint256 expNeeded = 3;
+        uint256 newbieNeeded = 2;
         // uint256[] memory jurorHistory = disputeStorage.getJurorDisputeHistory(juror1);
         // assertEq(jurorHistory[0], disputeId);
         // assertEq(disputeStorage.ongoingDisputeCount(juror1), 1);

@@ -52,7 +52,7 @@ contract DisputeManager is ConfirmedOwner {
     // EVENTS
     //////////////////////////
 
-    event DisputeOpened(uint256 indexed dealId, address indexed initiator);
+    event DisputeOpened(uint256 indexed dealId, uint256 indexed disputeId, address indexed initiator);
     event EvidenceAdded(
         uint256 indexed dealId,
         address indexed uploader,
@@ -85,76 +85,80 @@ contract DisputeManager is ConfirmedOwner {
 
     /// @notice Opens a dispute for a given deal
     /// @param dealId The ID of the deal
-    function openDispute(uint256 dealId, string calldata description) external returns (uint256, uint256) {
+    function openDispute(uint256 dealId, string calldata description)
+        external
+        returns (uint256 requestId, uint256 newDisputeId)
+    {
         TypesLib.Deal memory deal = bloomEscrow.getDeal(dealId);
 
-        // You cannot open a dispute if one is already opened for this deal
-        // if (disputes[disputeId].initiator != address(0)) {
-        //     revert DisputeManager__DisputeAlreadyOpened();
-        // }
-
-        // Ensure initiator is sender or receiver
-        if (msg.sender != deal.sender && msg.sender != deal.receiver) {
-            revert DisputeManager__Restricted();
-        }
-
-        if (deal.status != TypesLib.Status.Pending && deal.status != TypesLib.Status.Acknowledged) {
-            revert DisputeManager__CannotDispute();
-        }
-
-        // Charge dispute fee (if any) - omitted for simplicity
-        uint256 disputeFee = 0;
-
-        if (feeController.disputeFeePercentage() > 0) {
-            disputeFee = feeController.calculateDisputeFee(deal.amount);
-        }
-
-        // Transfer dispute fee to the contract;
-        // Dispute fee is the same as the token used to create deal.
-        if (deal.tokenAddress != ds.wrappedNative()) {
-            IERC20 token = IERC20(deal.tokenAddress);
-            token.safeTransferFrom(msg.sender, address(this), disputeFee);
+        if (deal.status == TypesLib.Status.Disputed && ds.getDisputeJurors(dealId).length == 0) {
+            // THen we try to select juror again.
+            newDisputeId = ds.dealToDispute(dealId);
+            requestId = jurorManager.selectJurors(newDisputeId);
         } else {
-            (bool nativeSuccess,) = msg.sender.call{value: disputeFee}("");
-            if (!nativeSuccess) {
-                revert DisputeManager__TransferFailed();
+            // Ensure initiator is sender or receiver
+            if (msg.sender != deal.sender && msg.sender != deal.receiver) {
+                revert DisputeManager__Restricted();
             }
+
+            if (deal.status != TypesLib.Status.Pending && deal.status != TypesLib.Status.Acknowledged) {
+                revert DisputeManager__CannotDispute();
+            }
+
+            // Charge dispute fee (if any) - omitted for simplicity
+            uint256 disputeFee = 0;
+
+            if (feeController.disputeFeePercentage() > 0) {
+                disputeFee = feeController.calculateDisputeFee(deal.amount);
+            }
+
+            // Transfer dispute fee to the contract;
+            // Dispute fee is the same as the token used to create deal.
+            if (deal.tokenAddress != ds.wrappedNative()) {
+                IERC20 token = IERC20(deal.tokenAddress);
+                token.safeTransferFrom(msg.sender, address(this), disputeFee);
+            } else {
+                (bool nativeSuccess,) = msg.sender.call{value: disputeFee}("");
+                if (!nativeSuccess) {
+                    revert DisputeManager__TransferFailed();
+                }
+            }
+
+            // disputeId++;
+            newDisputeId = ds.incrementDisputeId();
+
+            TypesLib.Dispute memory dispute = TypesLib.Dispute({
+                initiator: msg.sender,
+                sender: deal.sender,
+                receiver: deal.receiver,
+                winner: address(0),
+                description: description,
+                dealId: dealId,
+                disputeFee: disputeFee,
+                feeTokenAddress: deal.tokenAddress
+            });
+
+            ds.setDisputes(newDisputeId, dispute);
+
+            ds.updateAllDisputes(newDisputeId);
+
+            // disputes[disputeId] = dispute;
+
+            if (ds.dealToDispute(dealId) == 0) {
+                ds.setDealToDispute(dealId, newDisputeId);
+                // dealToDispute[dealId] = disputeId;
+            }
+
+            // update the deal status to Disputed
+            bloomEscrow.updateStatus(dealId, TypesLib.Status.Disputed);
+
+            // Select jurors;
+            requestId = jurorManager.selectJurors(newDisputeId);
+
+            console.log("Request ID: ", requestId);
         }
 
-        // disputeId++;
-        uint256 newDisputeId = ds.incrementDisputeId();
-
-        TypesLib.Dispute memory dispute = TypesLib.Dispute({
-            initiator: msg.sender,
-            sender: deal.sender,
-            receiver: deal.receiver,
-            winner: address(0),
-            description: description,
-            dealId: dealId,
-            disputeFee: disputeFee,
-            feeTokenAddress: deal.tokenAddress
-        });
-
-        ds.setDisputes(newDisputeId, dispute);
-
-        ds.updateAllDisputes(newDisputeId);
-
-        // disputes[disputeId] = dispute;
-
-        if (ds.dealToDispute(dealId) == 0) {
-            ds.setDealToDispute(dealId, newDisputeId);
-            // dealToDispute[dealId] = disputeId;
-        }
-
-        // update the deal status to Disputed
-        bloomEscrow.updateStatus(dealId, TypesLib.Status.Disputed);
-
-        // Select jurors;
-        uint256 requestId = jurorManager.selectJurors(newDisputeId);
-
-        console.log("Request ID: ", requestId);
-
-        emit DisputeOpened(dealId, msg.sender);
+        emit DisputeOpened(dealId, newDisputeId, msg.sender);
         return (newDisputeId, requestId);
     }
 
@@ -198,8 +202,8 @@ contract DisputeManager is ConfirmedOwner {
         // Timer memory appealDisputeTimer = disputeTimer[latestId];
         uint256 endTime =
             appealDisputeTimer.startTime + appealDisputeTimer.standardVotingDuration + appealDisputeTimer.extendDuration;
-        
-        if (ds.tieBreakerJuror(latestId) != address(0)){
+
+        if (ds.tieBreakerJuror(latestId) != address(0)) {
             endTime += ds.tieBreakingDuration();
         }
 
@@ -256,7 +260,6 @@ contract DisputeManager is ConfirmedOwner {
         ds.setDisputes(newDisputeId, dispute);
 
         ds.updateAllDisputes(newDisputeId);
-
 
         // Link the dispute Id to the appeal
         ds.pushIntoDisputeAppeals(_disputeId, newDisputeId);

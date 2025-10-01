@@ -18,6 +18,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, AutomationCom
     using SafeERC20 for IERC20;
 
     DisputeStorage public ds;
+    IERC20 public linkToken;
 
     IERC20 public bloomToken;
     uint256[] public requestIds;
@@ -80,7 +81,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, AutomationCom
     event MaxStakeAmountUpdated(uint256 indexed newMaxStakeAmount);
     event MoreStaked(address indexed juror, uint256 indexed additionalStaked, uint256 indexed newStakeAmount);
     event JurorsSelected(uint256 indexed disputeId, address[] indexed selected);
-    event RequestSent(uint256 requestId, uint32 numWords);
+    event RequestSent(uint256 indexed requestId, uint256 indexed disputeId, uint32 indexed numWords);
     event RequestFulfilled(uint256 requestId, uint256[] randomWords, uint256 payment);
     event Voted(uint256 indexed disputeId, address indexed jurorAddress, address indexed support);
     event JurorAdded(uint256 indexed _disputeId, address[] indexed newJurors);
@@ -98,6 +99,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, AutomationCom
     {
         ds = DisputeStorage(_storageAddress);
         bloomToken = ds.getBloomToken();
+        linkToken = IERC20(_linkAddress);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -227,7 +229,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, AutomationCom
         requestIdToDispute[requestId] = disputeId;
         requestToType[requestId] = RequestType.INITIAL;
 
-        emit RequestSent(requestId, ds.numWords());
+        emit RequestSent(requestId, disputeId, ds.numWords());
 
         return requestId;
     }
@@ -685,7 +687,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, AutomationCom
         requestIdToDispute[requestId] = _disputeId;
         requestToType[requestId] = RequestType.TIE_BREAKER;
 
-        emit RequestSent(requestId, 1);
+        emit RequestSent(requestId, _disputeId, 1);
 
         return requestId;
     }
@@ -946,5 +948,9 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, AutomationCom
         for (uint256 i = 0; i < jurorAddresses.length; i++) {
             ds.balanceMaxScore(jurorAddresses[i]);
         }
+    }
+
+    function withdrawLink() external {
+        IERC20(linkToken).transfer(msg.sender, linkToken.balanceOf(address(this)));
     }
 }
