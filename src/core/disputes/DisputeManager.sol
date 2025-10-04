@@ -90,6 +90,7 @@ contract DisputeManager is ConfirmedOwner {
         returns (uint256 requestId, uint256 newDisputeId)
     {
         TypesLib.Deal memory deal = bloomEscrow.getDeal(dealId);
+        //@notice- There is a big mistaker here.
 
         if (deal.status == TypesLib.Status.Disputed && ds.getDisputeJurors(dealId).length == 0) {
             // THen we try to select juror again.

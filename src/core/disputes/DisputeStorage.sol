@@ -101,9 +101,9 @@ contract DisputeStorage {
     // CANDIDATES & VOTING
     //////////////////////////
     uint256 public thresholdPercent = 6000; // 60% (top 40% will be in the experienced pool)
-    uint256 public appealThreshold = 3;
-    uint256 public missedVoteThreshold = 3;
-    uint256 public ongoingDisputeThreshold = 3;
+    uint256 public appealThreshold = 20;
+    uint256 public missedVoteThreshold = 20;
+    uint256 public ongoingDisputeThreshold = 20;
     uint256 public lambda = 0.2e18; // Smoothing factor scaled by 1e18
     uint256 public k = 5;
     uint256 public noVoteK = 8;
