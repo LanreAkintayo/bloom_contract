@@ -102,12 +102,12 @@ contract DisputeStorage {
     //////////////////////////
     uint256 public thresholdPercent = 6000; // 60% (top 40% will be in the experienced pool)
     uint256 public appealThreshold = 20;
-    uint256 public missedVoteThreshold = 20;
-    uint256 public ongoingDisputeThreshold = 20;
+    uint256 public missedVoteThreshold = 30;
+    uint256 public ongoingDisputeThreshold = 30;
     uint256 public lambda = 0.2e18; // Smoothing factor scaled by 1e18
     uint256 public k = 5;
     uint256 public noVoteK = 8;
-    uint256 public votingPeriod = block.chainid == 31337 ? 48 hours : 2 hours;
+    uint256 public votingPeriod = block.chainid == 31337 ? 48 hours : 5 hours;
     uint256 public tieBreakingDuration = 1 days;
 
     mapping(uint256 disputeId => address[] jurorAddresses) public disputeJurors;
@@ -141,7 +141,7 @@ contract DisputeStorage {
     // CHAINLINK VRF
     //////////////////////////
 
-    uint32 public callbackGasLimit = 1_800_000;
+    uint32 public callbackGasLimit = 1_600_000;
     uint16 public requestConfirmations = 3;
     uint32 public numWords = 2;
     address public linkAddress;

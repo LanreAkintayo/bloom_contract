@@ -47,6 +47,8 @@ contract DisputeManager is ConfirmedOwner {
     error DisputeManager__NoReward();
     error DisputeManager__NotEnoughReward();
     error DisputeManager__DisputeNotEnded();
+    error DisputeManager__InsufficientFee();
+    error DisputeManager__AlreadyDisputed();
 
     //////////////////////////
     // EVENTS
@@ -87,80 +89,74 @@ contract DisputeManager is ConfirmedOwner {
     /// @param dealId The ID of the deal
     function openDispute(uint256 dealId, string calldata description)
         external
+        payable
         returns (uint256 requestId, uint256 newDisputeId)
     {
         TypesLib.Deal memory deal = bloomEscrow.getDeal(dealId);
-        //@notice- There is a big mistaker here.
+        uint256 existingDisputeId = ds.dealToDispute(dealId);
 
-        if (deal.status == TypesLib.Status.Disputed && ds.getDisputeJurors(dealId).length == 0) {
-            // THen we try to select juror again.
-            newDisputeId = ds.dealToDispute(dealId);
-            requestId = jurorManager.selectJurors(newDisputeId);
-        } else {
-            // Ensure initiator is sender or receiver
-            if (msg.sender != deal.sender && msg.sender != deal.receiver) {
-                revert DisputeManager__Restricted();
-            }
+        //@notice check if there are enough jurors before you open dispute
 
-            if (deal.status != TypesLib.Status.Pending && deal.status != TypesLib.Status.Acknowledged) {
-                revert DisputeManager__CannotDispute();
-            }
-
-            // Charge dispute fee (if any) - omitted for simplicity
-            uint256 disputeFee = 0;
-
-            if (feeController.disputeFeePercentage() > 0) {
-                disputeFee = feeController.calculateDisputeFee(deal.amount);
-            }
-
-            // Transfer dispute fee to the contract;
-            // Dispute fee is the same as the token used to create deal.
-            if (deal.tokenAddress != ds.wrappedNative()) {
-                IERC20 token = IERC20(deal.tokenAddress);
-                token.safeTransferFrom(msg.sender, address(this), disputeFee);
+        // Handle existing dispute with missing jurors
+        if (deal.status == TypesLib.Status.Disputed && existingDisputeId != 0) {
+            if (ds.getDisputeJurors(existingDisputeId).length == 0) {
+                requestId = jurorManager.selectJurors(existingDisputeId);
+                emit DisputeOpened(dealId, existingDisputeId, msg.sender);
+                return (requestId, existingDisputeId);
             } else {
-                (bool nativeSuccess,) = msg.sender.call{value: disputeFee}("");
-                if (!nativeSuccess) {
-                    revert DisputeManager__TransferFailed();
-                }
+                revert DisputeManager__AlreadyDisputed();
             }
-
-            // disputeId++;
-            newDisputeId = ds.incrementDisputeId();
-
-            TypesLib.Dispute memory dispute = TypesLib.Dispute({
-                initiator: msg.sender,
-                sender: deal.sender,
-                receiver: deal.receiver,
-                winner: address(0),
-                description: description,
-                dealId: dealId,
-                disputeFee: disputeFee,
-                feeTokenAddress: deal.tokenAddress
-            });
-
-            ds.setDisputes(newDisputeId, dispute);
-
-            ds.updateAllDisputes(newDisputeId);
-
-            // disputes[disputeId] = dispute;
-
-            if (ds.dealToDispute(dealId) == 0) {
-                ds.setDealToDispute(dealId, newDisputeId);
-                // dealToDispute[dealId] = disputeId;
-            }
-
-            // update the deal status to Disputed
-            bloomEscrow.updateStatus(dealId, TypesLib.Status.Disputed);
-
-            // Select jurors;
-            requestId = jurorManager.selectJurors(newDisputeId);
-
-            console.log("Request ID: ", requestId);
         }
 
+        // Restrict who can open a dispute
+        if (msg.sender != deal.sender && msg.sender != deal.receiver) {
+            revert DisputeManager__Restricted();
+        }
+
+        // Ensure deal is still disputable
+        if (deal.status != TypesLib.Status.Pending && deal.status != TypesLib.Status.Acknowledged) {
+            revert DisputeManager__CannotDispute();
+        }
+
+        // Calculate and collect dispute fee
+        uint256 disputeFee = 0;
+        if (feeController.disputeFeePercentage() > 0) {
+            disputeFee = feeController.calculateDisputeFee(deal.amount);
+        }
+
+        // If native token deal
+        if (deal.tokenAddress == ds.wrappedNative()) {
+            if (msg.value < disputeFee) revert DisputeManager__InsufficientFee();
+        } else {
+            IERC20(deal.tokenAddress).safeTransferFrom(msg.sender, address(this), disputeFee);
+        }
+
+        // Create new dispute
+        newDisputeId = ds.incrementDisputeId();
+
+        TypesLib.Dispute memory dispute = TypesLib.Dispute({
+            initiator: msg.sender,
+            sender: deal.sender,
+            receiver: deal.receiver,
+            winner: address(0),
+            description: description,
+            dealId: dealId,
+            disputeFee: disputeFee,
+            feeTokenAddress: deal.tokenAddress
+        });
+
+        // Store dispute
+        ds.setDisputes(newDisputeId, dispute);
+        ds.setDealToDispute(dealId, newDisputeId);
+        ds.updateAllDisputes(newDisputeId);
+
+        // Update deal status
+        bloomEscrow.updateStatus(dealId, TypesLib.Status.Disputed);
+
+        // Select jurors
+        requestId = jurorManager.selectJurors(newDisputeId);
+
         emit DisputeOpened(dealId, newDisputeId, msg.sender);
-        return (newDisputeId, requestId);
     }
 
     function closeDispute(uint256 _disputeId) external {
