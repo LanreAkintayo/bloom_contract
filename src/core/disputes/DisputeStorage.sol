@@ -392,7 +392,7 @@ contract DisputeStorage {
     }
 
     function updateJurorTokenPayments(address _jurorAddress, address _tokenAddress, uint256 _amount) external {
-        jurorTokenPayments[_jurorAddress][_tokenAddress] = _amount;
+        jurorTokenPayments[_jurorAddress][_tokenAddress] += _amount;
     }
 
     function updateJurorTokenPaymentsClaimed(address _jurorAddress, address _tokenAddress, uint256 _amount) external {

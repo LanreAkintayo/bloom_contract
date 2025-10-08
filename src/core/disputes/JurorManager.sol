@@ -89,6 +89,9 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, AutomationCom
     event StakeWithdrawn(address indexed jurorAddress, uint256 indexed amount);
     event TieSelectionCompleted(uint256 indexed _disputeId, address indexedselectedJurorAddress);
     event ExtendedVotingPeriod(uint256 indexed _disputeId);
+    event DisputeFinished(uint256 indexed _disputeId, address indexed winner, address indexed loser, uint256 winnerCount, uint256 loserCount);
+
+    
 
     /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
@@ -431,60 +434,6 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, AutomationCom
         return trimmed;
     }
 
-    // function checkUpkeep(bytes calldata /*checkData*/ )
-    //     external
-    //     view
-    //     returns (bool upkeepNeeded, bytes memory performData)
-    // {
-    //     uint256[] memory allDisputes = ds.getAllDisputes();
-    //     uint256[] memory disputesToExtend = new uint256[](allDisputes.length);
-    //     uint256[] memory disputesToFinish = new uint256[](allDisputes.length);
-
-    //     uint256 finishCount = 0;
-    //     uint256 extendCount = 0;
-
-    //     for (uint256 i = 0; i < allDisputes.length; i++) {
-    //         uint256 disputeId = allDisputes[i];
-
-    //         // Skip disputes that are no longer in voting
-    //         if (!ds.ongoingDisputes(disputeId)) continue;
-
-    //         // Get timer and dispute info
-    //         TypesLib.Timer memory timer = ds.getDisputeTimer(disputeId);
-    //         TypesLib.Dispute memory dispute = ds.getDispute(disputeId);
-
-    //         // Case 1: Check for extension
-    //         if (timer.extendDuration == 0 && block.timestamp > timer.startTime + timer.standardVotingDuration) {
-    //             uint256 confirmedVotes = _getConfirmedVotes(disputeId);
-    //             uint256 quorum = ds.getDisputeJurors(disputeId).length - 2;
-    //             if (confirmedVotes < quorum) {
-    //                 disputesToExtend[extendCount++] = disputeId;
-    //                 continue;
-    //             }
-    //         }
-
-    //         // Case 2: Check for finish
-    //         uint256 endTime = timer.startTime + timer.standardVotingDuration + timer.extendDuration;
-    //         address tieBreaker = ds.tieBreakerJuror(disputeId);
-    //         if (tieBreaker != address(0)) {
-    //             endTime += ds.tieBreakingDuration();
-    //         }
-    //         if (block.timestamp > endTime) {
-    //             if (dispute.winner == address(0)) {
-    //                 disputesToFinish[finishCount++] = disputeId;
-    //             }
-    //         }
-    //     }
-
-    //     if (extendCount > 0 || finishCount > 0) {
-    //         upkeepNeeded = true;
-    //         performData = abi.encode(_shrink(disputesToExtend, extendCount), _shrink(disputesToFinish, finishCount));
-    //     } else {
-    //         upkeepNeeded = false;
-    //         performData = "";
-    //     }
-    // }
-
     function checkUpkeep(bytes calldata /*checkData*/ )
         external
         view
@@ -795,7 +744,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, AutomationCom
         ds.updateDisputeStatus(_disputeId, false);
 
         // Emit events;
-        // emit DisputeFinished(_disputeId, winner, loser, winnerCount, loserCount);
+        emit DisputeFinished(_disputeId, winner, loser, winnerCount, loserCount);
     }
 
     function _determineWinner(uint256 _disputeId, TypesLib.Vote[] memory allVotes)
@@ -919,13 +868,12 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, AutomationCom
                 ds.updateJurorScore(jurorAddr);
 
                 // final payout = base fee + indivFee (+ dust for last juror)
-                uint256 payout = baseFee + indivFee;
+                uint256 payout = indivFee;
                 if (i == winnerCount - 1 && dust > 0) {
                     payout += dust;
                 }
 
-                uint256 prev = ds.getJurorTokenPayment(jurorAddr, dispute.feeTokenAddress);
-                ds.updateJurorTokenPayments(jurorAddr, dispute.feeTokenAddress, prev + payout);
+                ds.updateJurorTokenPayments(jurorAddr, dispute.feeTokenAddress, payout);
 
                 ds.updateDisputeToJurorPayment(
                     disputeId,
