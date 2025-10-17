@@ -28,7 +28,7 @@ contract TransferFunds is Script {
         walletAddresses[9] = 0xE96fe7aD34B1a276C7cBc8ec1b0dB4866976FcA4;
 
         uint256 amountToMint = 5_000_000e18;
-        uint256 ethValueToSend = 0.001e18;
+        uint256 ethValueToSend = 0.002e18;
         uint256 bloomToSend = 100_000e18;
         address bloomToken = 0xc4E523B7d26186eC7f1dCBed8a64DaBDE795C98E;
         IERC20Mock bloomTokenContract = IERC20Mock(bloomToken);
@@ -40,10 +40,10 @@ contract TransferFunds is Script {
         bloomTokenContract.mint(deployerWallet, amountToMint);
 
         for (uint256 i = 0; i < walletAddresses.length; i++) {
-            // console.log("Sending eth to: ", walletAddresses[i]);
+            console.log("Sending eth to: ", walletAddresses[i]);
             // // Send eth to all the addresses
             address currentWallet = walletAddresses[i];
-            // currentWallet.call{value: ethValueToSend}("");
+            currentWallet.call{value: ethValueToSend}("");
 
             // Send bloom
             console.log("Sending bloom to: ", currentWallet);

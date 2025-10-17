@@ -39,3 +39,8 @@ we want to keep track of the max stake and max reputation. When you register, st
 when stake and reputation changes, your scores will also be recomputed.
 when score gets recomputed, the experienced pool and the newbie pool will also get recomputed.
 
+
+ forge script script/deploy/DeployAll.s.sol:DeployAll   --rpc-url $SEPOLIA_RPC_URL   --broadcast   --private-key $PRIVATE_KEY 
+
+  forge verify-contract --chain sepolia 0xCeDDfC31c1Ac1CA4F9D309eA9428E098e67f5531 src/core/disputes/JurorManager.sol:JurorManager $ETHERSCAN_API_KEY
+
