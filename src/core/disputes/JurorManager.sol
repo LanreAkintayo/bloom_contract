@@ -467,11 +467,7 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, AutomationCom
                 (uint256 expNeeded, uint256 newbieNeeded) = ds.getJurorComposition(neededDisputeId, neededAppealId);
                 uint256 quorum = expNeeded + newbieNeeded - 2;
 
-                console.log("Confirmed Votes: ", confirmedVotes);
-                console.log("Quorum: ", quorum);
-
                 if (confirmedVotes < quorum) {
-                    console.log("abcd: To extend");
                     disputesToExtend[extendCount++] = disputeId;
                     continue;
                 }
@@ -506,7 +502,6 @@ contract JurorManager is VRFV2WrapperConsumerBase, ConfirmedOwner, AutomationCom
         }
 
         for (uint256 i = 0; i < toFinish.length; i++) {
-            // console.log("Dispute ID to finish: ", toFinish[i]);
             _finishDispute(toFinish[i]);
         }
     }

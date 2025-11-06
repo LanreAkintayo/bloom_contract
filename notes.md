@@ -30,7 +30,7 @@ Evidence should have an ID or something
 
 1. Add vrf timeout
 2. select juror should be for everybody
-3. add more getters
+3. add more getters and setters
 
 
 
