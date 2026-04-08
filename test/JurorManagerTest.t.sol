@@ -89,7 +89,6 @@ contract JurorManagerTest is BaseJuror {
         return (disputeId, requestId);
     }
 
-
        function _openDisputeWithoutFulfilling(address _sender, uint256 dealId, string memory description)
         internal
         returns (uint256, uint256)
@@ -314,7 +313,7 @@ contract JurorManagerTest is BaseJuror {
         uint256 dealId = _createERC20Deal(sender, receiver, daiTokenAddress, dealAmount, description);
 
         // Then you should be able to open a dispute;
-        _openDisputeWithoutFulfilling(sender, dealId, description);
+        // _openDispute(sender, dealId, description);
          _openDisputeWithoutFulfilling(sender, dealId, description);
         (uint256 disputeId, uint256 requestId) = _openDispute(sender, dealId, description);
 

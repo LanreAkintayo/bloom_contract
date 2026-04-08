@@ -11,6 +11,8 @@ import {LinkToken} from "@chainlink/contracts/src/v0.8/shared/token/ERC677/LinkT
 import {VRFV2Wrapper} from "@chainlink/contracts/src/v0.8/vrf/VRFV2Wrapper.sol";
 import {Bloom} from "../src/token/Bloom.sol";
 
+import {console} from "forge-std/console.sol";
+
 abstract contract CodeConstants {
     // For ETH
     uint8 public constant ETH_DECIMALS = 18;
@@ -61,7 +63,7 @@ contract HelperConfig is CodeConstants, Script {
     // Local network state variables
     NetworkConfig public localNetworkConfig;
     mapping(uint256 chainId => NetworkConfig) public networkConfigs;
-    VRFCoordinatorV2Mock public vrfCoordinator;
+    VRFCoordinatorV2Mock public vrfCoordinator; 
     VRFV2Wrapper public wrapper;
 
     // MockV3Aggregator mockEthPriceFeed;
@@ -83,6 +85,7 @@ contract HelperConfig is CodeConstants, Script {
         if (networkConfigs[chainId].ethUsdPriceFeed != address(0)) {
             return networkConfigs[chainId];
         } else if (chainId == LOCAL_CHAIN_ID) {
+            console.log("We are here inside local_chain_id");
             return getOrCreateAnvilEthConfig();
         } else {
             revert HelperConfig__InvalidChainId();

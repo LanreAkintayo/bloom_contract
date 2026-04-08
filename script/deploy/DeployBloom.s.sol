@@ -28,9 +28,7 @@ contract DeployBloom is Script {
 
         // Deploy the Bloom contract
         Bloom bloom = new Bloom();
-
-        // Example: mint total supply to deployer
-        // bloom.mint(deployer, bloom.totalSupply());
+        
 
         vm.stopBroadcast();
 
